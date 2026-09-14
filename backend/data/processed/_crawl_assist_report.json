@@ -1,0 +1,18 @@
+{
+  "total_entries": 362,
+  "customer_support_records": 331,
+  "legal_records_from_assist": 31,
+  "failures": [
+    {
+      "url": "https://assist.kohler.com/en/cookies",
+      "error": "status=404"
+    }
+  ],
+  "cross_listed": [
+    "Removing-an-aerator",
+    "Extension-Deep-Roughing-In-Kits-for-Faucets",
+    "Leaking-Under-the-Handle",
+    "Leaking-from-End-of-Spout",
+    "Cutout-Templates"
+  ]
+}

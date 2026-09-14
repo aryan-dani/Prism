@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+backend/.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# uv
+.python-version
+
+# Data (raw crawl cache + built Chroma index are reproducible; sessions are local)
+backend/data/raw/
+backend/data/chroma/
+backend/data/sessions.db
+backend/data/sessions.db-*
+*.log
+
+# Frontend (React / Vite)
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.tmp/
+
+# Legacy paths (safety if old layout reappears)
+web/node_modules/
+web/dist/
+web/.vite/
+data/raw/
+data/chroma/
+data/sessions.db
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors / agents
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+
+# Synthetic policy PDF exports (Markdown sources are canonical)
+backend/data/synthetic/*.pdf
+
+# Eval: keep summary artifacts, ignore ephemeral run dumps + scratch
+backend/eval/results/*.xlsx
+backend/eval/results/stress/run_*/
+backend/eval/results/stress/_*.log
+backend/eval/results/stress/latest_run.txt
+backend/eval/results/_*.log
+backend/eval/_smoke_*.py
+backend/eval/**/_smoke_*.py
+
+# Keep committed (do NOT ignore):
+#   backend/data/processed/*.jsonl
+#   backend/data/synthetic/*.md
+#   backend/eval/results/LATEST_REPORT.md  (via stress/)
+#   backend/eval/results/model_bench.*
+#   backend/eval/results/validation_*.md
+#   backend/eval/results/routing_smoke.json
+#   docs/**  (including docs/pdf/*.pdf)
+#   references/**

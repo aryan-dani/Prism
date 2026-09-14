@@ -1,0 +1,6 @@
+{
+  "routing_accuracy": 0.9210526315789473,
+  "hit_at_5": 1.0,
+  "avg_routing_latency_s": 0.07655000000013387,
+  "n_single_turn": 40
+}

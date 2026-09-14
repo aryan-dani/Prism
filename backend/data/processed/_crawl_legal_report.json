@@ -1,0 +1,10 @@
+{
+  "privacy_records": 51,
+  "legal_records_from_kohler": 14,
+  "failures": [
+    {
+      "url": "https://assist.kohler.com/en/cookies",
+      "error": "status=404 -- flagged, not synthesized"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+[
+  {
+    "model": "qwen2.5:7b-instruct",
+    "n_questions": 12,
+    "schema_adherence_rate": 1.0,
+    "fact_recall_rate": 0.7407407407407407,
+    "finance_exactness_rate": 0.6666666666666666,
+    "no_answer_honesty_rate": null,
+    "avg_latency_seconds": 6.361833333323982,
+    "peak_vram_mb": 5143.0
+  },
+  {
+    "model": "qwen3:8b",
+    "n_questions": 12,
+    "schema_adherence_rate": 1.0,
+    "fact_recall_rate": 0.7407407407407407,
+    "finance_exactness_rate": 0.6666666666666666,
+    "no_answer_honesty_rate": null,
+    "avg_latency_seconds": 18.37341666665937,
+    "peak_vram_mb": 6241.0
+  }
+]
