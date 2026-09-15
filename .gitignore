@@ -64,6 +64,11 @@ backend/eval/results/stress/latest_run.txt
 backend/eval/results/_*.log
 backend/eval/_smoke_*.py
 backend/eval/**/_smoke_*.py
+backend/eval/_adv*.py
+backend/eval/**/_adv*.py
+backend/eval/_*.py
+!backend/eval/__init__.py
+!backend/eval/**/__init__.py
 
 # Keep committed (do NOT ignore):
 #   backend/data/processed/*.jsonl

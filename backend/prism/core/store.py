@@ -12,6 +12,9 @@ model doesn't weight heavily -- model numbers ("K-3901"), section numbers,
 and numeric thresholds ("₹25,000") -- are exactly the tokens Finance/Legal
 questions hinge on. Chroma's dense search alone under-ranks exact-token
 matches; BM25 + dense fused via reciprocal-rank fusion covers both.
+
+The BM25 pickle stores ids, documents, AND metadatas so sparse hits do not
+need a per-id Chroma `get` on every query (major latency win on hybrid search).
 """
 
 from __future__ import annotations
@@ -85,6 +88,7 @@ class PrismStore:
         self._bm25: BM25Okapi | None = None
         self._bm25_ids: list[str] = []
         self._bm25_docs: list[str] = []
+        self._bm25_metas: list[dict] = []
         self._load_bm25()
 
     # ------------------------------------------------------------------
@@ -118,6 +122,7 @@ class PrismStore:
 
         self._bm25_ids = ids
         self._bm25_docs = texts
+        self._bm25_metas = metadatas
         tokenized = [tokenize(t) for t in texts]
         self._bm25 = BM25Okapi(tokenized)
         self._save_bm25()
@@ -127,7 +132,14 @@ class PrismStore:
     def _save_bm25(self) -> None:
         BM25_PATH.parent.mkdir(parents=True, exist_ok=True)
         with BM25_PATH.open("wb") as f:
-            pickle.dump({"ids": self._bm25_ids, "docs": self._bm25_docs}, f)
+            pickle.dump(
+                {
+                    "ids": self._bm25_ids,
+                    "docs": self._bm25_docs,
+                    "metadatas": self._bm25_metas,
+                },
+                f,
+            )
 
     def _load_bm25(self) -> None:
         if not BM25_PATH.exists():
@@ -136,9 +148,39 @@ class PrismStore:
             data = pickle.load(f)
         self._bm25_ids = data["ids"]
         self._bm25_docs = data["docs"]
+        self._bm25_metas = data.get("metadatas") or []
+        # Older sidecars lacked metadatas — hydrate once from Chroma and rewrite.
+        if self._bm25_ids and (
+            not self._bm25_metas or len(self._bm25_metas) != len(self._bm25_ids)
+        ):
+            self._hydrate_bm25_metas_from_chroma()
         tokenized = [tokenize(t) for t in self._bm25_docs]
         if tokenized:
             self._bm25 = BM25Okapi(tokenized)
+
+    def _hydrate_bm25_metas_from_chroma(self) -> None:
+        """One-shot bulk fetch so sparse_search never needs per-hit Chroma gets."""
+        got = self._collection.get(ids=self._bm25_ids, include=["metadatas", "documents"])
+        by_id = {
+            id_: (doc, meta)
+            for id_, doc, meta in zip(got.get("ids") or [], got.get("documents") or [], got.get("metadatas") or [])
+        }
+        metas: list[dict] = []
+        docs: list[str] = []
+        for id_ in self._bm25_ids:
+            pair = by_id.get(id_)
+            if pair is None:
+                metas.append({})
+                docs.append("")
+            else:
+                doc, meta = pair
+                docs.append(doc or "")
+                metas.append(meta or {})
+        self._bm25_metas = metas
+        # Prefer Chroma documents if sidecar docs were empty/mismatched length.
+        if len(docs) == len(self._bm25_ids) and any(docs):
+            self._bm25_docs = docs
+        self._save_bm25()
 
     # ------------------------------------------------------------------
     # Retrieval
@@ -174,15 +216,20 @@ class PrismStore:
                 continue
             if scores[i] <= 0:
                 continue
-            # metadata isn't stored in the BM25 sidecar -- fetch from Chroma by id.
-            got = self._collection.get(ids=[id_], include=["metadatas", "documents"])
-            if not got["ids"]:
-                continue
+            text = self._bm25_docs[i] if i < len(self._bm25_docs) else ""
+            meta = self._bm25_metas[i] if i < len(self._bm25_metas) else {}
+            if not text and not meta:
+                # Extremely defensive fallback for corrupt sidecars.
+                got = self._collection.get(ids=[id_], include=["metadatas", "documents"])
+                if not got["ids"]:
+                    continue
+                text = got["documents"][0]
+                meta = got["metadatas"][0]
             chunks.append(
                 RetrievedChunk(
                     id=id_,
-                    text=got["documents"][0],
-                    metadata=got["metadatas"][0],
+                    text=text,
+                    metadata=meta or {},
                     sparse_rank=rank,
                 )
             )

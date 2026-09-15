@@ -9,6 +9,7 @@ Optional:
   $env:PRISM_STRESS_LIMIT="5"          # first N cases only (smoke)
   $env:PRISM_STRESS_BASE="http://127.0.0.1:8000"
   $env:PRISM_STRESS_CATEGORIES="1_numeric_boundary,6_hallucination_honesty"
+  $env:PRISM_STRESS_IDS="long_01_12turn_carryforward_email,fmt_03_excel_on_yesno"
 
 Writes:
   eval/results/stress/run_<timestamp>/
@@ -43,6 +44,10 @@ RESULTS_ROOT = Path(__file__).resolve().parents[1] / "results" / "stress"
 
 
 def _filter_bank(bank: list[dict]) -> list[dict]:
+    ids = os.environ.get("PRISM_STRESS_IDS")
+    if ids:
+        allow = {i.strip() for i in ids.split(",") if i.strip()}
+        bank = [c for c in bank if c["id"] in allow]
     cats = os.environ.get("PRISM_STRESS_CATEGORIES")
     if cats:
         allow = {c.strip() for c in cats.split(",") if c.strip()}

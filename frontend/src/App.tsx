@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  chat,
+  chatStream,
   createSession,
   deleteSession,
   downloadExcelUrl,
@@ -53,7 +53,16 @@ function displayTitle(raw: string | null | undefined, fallback = 'Untitled chat'
   return t
 }
 
-function turnsToMessages(turns: Array<{ role: string; content: string; domain?: string | null }>): Message[] {
+function turnsToMessages(
+  turns: Array<{
+    role: string
+    content: string
+    domain?: string | null
+    is_clarification?: boolean
+    no_answer?: boolean
+    confidence?: string | null
+  }>,
+): Message[] {
   return turns
     .filter((t) => t.role === 'user' || t.role === 'assistant')
     .map((t) => ({
@@ -61,7 +70,43 @@ function turnsToMessages(turns: Array<{ role: string; content: string; domain?: 
       role: t.role as 'user' | 'assistant',
       content: t.content,
       domain: t.domain,
+      isClarification: Boolean(t.is_clarification),
+      noAnswer: Boolean(t.no_answer),
+      confidence: t.confidence ?? null,
     }))
+}
+
+function confidenceTone(confidence?: string | null): string {
+  switch ((confidence || '').toLowerCase()) {
+    case 'high':
+      return 'ok'
+    case 'medium':
+      return 'mid'
+    case 'low':
+    case 'none':
+      return 'warn'
+    default:
+      return ''
+  }
+}
+
+function AnswerStateBanner({ m }: { m: Message }) {
+  if (m.role !== 'assistant') return null
+  if (m.isClarification) {
+    return (
+      <div className="answer-banner clarify-banner" role="status">
+        Clarification needed — pick a domain or rephrase so Prism can route correctly.
+      </div>
+    )
+  }
+  if (m.noAnswer) {
+    return (
+      <div className="answer-banner honesty-banner" role="status">
+        No confident match in the knowledge base — refusing to invent an answer.
+      </div>
+    )
+  }
+  return null
 }
 
 export default function App() {
@@ -174,7 +219,7 @@ export default function App() {
     setMessages((prev) => [...prev, { id: uid(), role: 'user', content: message }])
     setStatus('Thinking…')
     try {
-      const res = await chat(activeId, message)
+      const res = await chatStream(activeId, message, (label) => setStatus(label))
       setMessages((prev) => [
         ...prev,
         {
@@ -191,7 +236,13 @@ export default function App() {
       ])
       setFormats(res.available_formats.length ? res.available_formats : ['prose'])
       await refreshSessions()
-      setStatus(res.is_clarification ? 'Waiting for clarification' : `Answered · ${res.domain ?? 'general'}`)
+      setStatus(
+        res.is_clarification
+          ? 'Waiting for clarification'
+          : res.no_answer
+            ? `No confident answer · ${res.domain ?? 'general'}`
+            : `Answered · ${res.domain ?? 'general'} · ${res.confidence ?? 'n/a'} confidence`,
+      )
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Chat failed')
     } finally {
@@ -262,7 +313,13 @@ export default function App() {
         </div>
         {health && (
           <div className="sidebar-foot">
-            {health.chunks_indexed} chunks · {health.gen_model}
+            <div>
+              {health.chunks_indexed} chunks · {health.gen_model}
+            </div>
+            <div className={`health-pill ${health.status === 'ok' ? 'ok' : 'degraded'}`}>
+              API {health.status}
+              {health.ollama && !health.ollama.ok ? ' · Ollama incomplete' : ''}
+            </div>
           </div>
         )}
       </aside>
@@ -299,14 +356,31 @@ export default function App() {
             </div>
           ) : (
             messages.map((m) => (
-              <div key={m.id} className={`bubble ${m.role}${m.isClarification ? ' clarify' : ''}`}>
+              <div
+                key={m.id}
+                className={[
+                  'bubble',
+                  m.role,
+                  m.isClarification ? 'clarify' : '',
+                  m.noAnswer && !m.isClarification ? 'no-answer' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+              >
+                <AnswerStateBanner m={m} />
                 {m.content}
                 {m.role === 'assistant' && (
                   <div className="meta-row">
                     {m.domain && <span className="chip active">{m.domain.replaceAll('_', ' ')}</span>}
-                    {m.confidence && <span className="chip">{m.confidence} confidence</span>}
-                    {m.noAnswer && <span className="chip warn">no confident match</span>}
-                    {m.isClarification && <span className="chip warn">clarification</span>}
+                    {m.confidence && (
+                      <span className={`chip conf ${confidenceTone(m.confidence)}`}>
+                        {m.confidence} confidence
+                      </span>
+                    )}
+                    {m.noAnswer && !m.isClarification && (
+                      <span className="chip warn">no confident match</span>
+                    )}
+                    {m.isClarification && <span className="chip warn">needs clarification</span>}
                   </div>
                 )}
                 {m.sources && m.sources.length > 0 && (

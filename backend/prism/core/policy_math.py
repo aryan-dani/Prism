@@ -182,11 +182,13 @@ def try_leave_year_join_math(query: str) -> ComputedPolicyAnswer | None:
 
 def try_termination_multihop(query: str) -> ComputedPolicyAnswer | None:
     q = query.lower()
-    if "terminat" not in q and "for cause" not in q and "separation" not in q:
+    if "terminat" not in q and "for cause" not in q:
         return None
-    if "leave" not in q:
+    if "leave" not in q and "encash" not in q and "payout" not in q:
         return None
-    if not any(w in q for w in ("expense", "data", "delete", "privacy", "payout", "encash")):
+    # Require a true multi-hop (leave + at least one other domain signal).
+    other = any(w in q for w in ("expense", "reimburse", "claim", "data", "delete", "privacy", "personal"))
+    if not other:
         return None
 
     direct = (
@@ -225,9 +227,139 @@ def try_termination_multihop(query: str) -> ComputedPolicyAnswer | None:
     )
 
 
+# Finance Section 2.1 approval bands (amounts inclusive of upper bound except top band)
+FINANCE_BAND_SELF = 5_000
+FINANCE_BAND_MANAGER = 25_000
+FINANCE_BAND_DEPT = 100_000
+
+_INR_AMOUNT_RE = re.compile(
+    r"(?:₹|rs\.?\s*|inr\s*)([\d,]+)|([\d,]+)\s*(?:rupees?\b|rs\b)",
+    re.I,
+)
+
+
+def parse_inr_amount(query: str) -> int | None:
+    """Parse the first INR-like amount in the query (Indian grouping commas OK)."""
+    m = _INR_AMOUNT_RE.search(query)
+    raw = None
+    if m:
+        raw = (m.group(1) or m.group(2) or "").replace(",", "")
+    else:
+        # Fallback when the ₹ glyph was stripped by a client encoding issue.
+        m2 = re.search(
+            r"(?:claim|expense|invoice|approv).{0,60}?(?:exactly\s+)?([\d]{1,3}(?:,\d{2,3})+|\d{4,7})\b",
+            query,
+            re.I | re.S,
+        )
+        if m2:
+            raw = m2.group(1).replace(",", "")
+    if not raw or not raw.isdigit():
+        return None
+    return int(raw)
+
+
+def approval_for_claim_amount(amount: int) -> tuple[str, str, list[KeyFact]]:
+    """Return (direct_answer, band_label, key_facts) for Finance §2.1."""
+    if amount <= FINANCE_BAND_SELF:
+        band = f"₹0 to ₹{FINANCE_BAND_SELF:,}"
+        approver = "Self-certified by claimant (no additional Finance sign-off)"
+        detail = (
+            f"A claim of ₹{amount:,} falls in the {band} band: it is self-certified by the claimant; "
+            "no additional Finance sign-off is required (Reporting Manager approval may still apply under HR process)."
+        )
+        facts = [
+            KeyFact(label="Claim amount", value=f"₹{amount:,}"),
+            KeyFact(label="Approval band", value=band),
+            KeyFact(label="Required approval", value="Self-certified by claimant"),
+        ]
+    elif amount <= FINANCE_BAND_MANAGER:
+        band = f"₹{FINANCE_BAND_SELF + 1:,} to ₹{FINANCE_BAND_MANAGER:,}"
+        approver = "Reporting Manager sign-off"
+        detail = (
+            f"A claim of ₹{amount:,} falls in the {band} band and requires Reporting Manager sign-off."
+        )
+        facts = [
+            KeyFact(label="Claim amount", value=f"₹{amount:,}"),
+            KeyFact(label="Approval band", value=band),
+            KeyFact(label="Required approval", value="Reporting Manager sign-off"),
+        ]
+    elif amount <= FINANCE_BAND_DEPT:
+        band = f"₹{FINANCE_BAND_MANAGER + 1:,} to ₹{FINANCE_BAND_DEPT:,}"
+        approver = "Department Head sign-off (in addition to Reporting Manager)"
+        detail = (
+            f"A claim of ₹{amount:,} falls in the {band} band and requires Department Head sign-off "
+            "in addition to the Reporting Manager."
+        )
+        facts = [
+            KeyFact(label="Claim amount", value=f"₹{amount:,}"),
+            KeyFact(label="Approval band", value=band),
+            KeyFact(label="Required approval", value=approver),
+        ]
+    else:
+        band = f"Above ₹{FINANCE_BAND_DEPT:,}"
+        approver = "Chief Financial Officer (CFO) sign-off (in addition to Department Head)"
+        detail = (
+            f"A claim of ₹{amount:,} is above ₹{FINANCE_BAND_DEPT:,} and requires CFO sign-off "
+            "in addition to the Department Head."
+        )
+        facts = [
+            KeyFact(label="Claim amount", value=f"₹{amount:,}"),
+            KeyFact(label="Approval band", value=band),
+            KeyFact(label="Required approval", value=approver),
+        ]
+    return detail, band, facts
+
+
+def try_expense_approval_band(query: str) -> ComputedPolicyAnswer | None:
+    """Map a stated claim amount to Finance §2.1 approval authority in code."""
+    q = query.lower()
+    amount = parse_inr_amount(query)
+    if amount is None:
+        return None
+
+    looks_like_claim = any(w in q for w in ("claim", "expense", "invoice", "reimburse", "reimbursement"))
+    asks_approval = any(
+        w in q
+        for w in (
+            "approv",
+            "who needs",
+            "who must",
+            "who signs",
+            "sign-off",
+            "sign off",
+            "what about",
+            "instead",
+        )
+    )
+    if not (looks_like_claim and asks_approval):
+        return None
+    # Don't steal broad threshold-list questions (no single amount intent).
+    if "threshold" in q and "band" in q and q.count("₹") + q.count("rs") > 2:
+        return None
+
+    detail, _band, facts = approval_for_claim_amount(amount)
+    return ComputedPolicyAnswer(
+        reason="finance_approval_band",
+        answer=CanonicalAnswer(
+            query=query,
+            domain="finance",
+            direct_answer=detail,
+            key_facts=facts,
+            sources=["data/synthetic/finance_policy.md"],
+            confidence="high",
+            no_answer=False,
+            caveats=[
+                "Approval authority looked up from Finance Policy Section 2.1 bands in code "
+                "(total claim value, not line items)."
+            ],
+        ),
+    )
+
+
 def try_deterministic_policy_answer(query: str) -> ComputedPolicyAnswer | None:
     return (
         try_cl_carry_forward(query)
         or try_leave_year_join_math(query)
         or try_termination_multihop(query)
+        or try_expense_approval_band(query)
     )

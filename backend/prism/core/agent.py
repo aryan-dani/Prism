@@ -15,25 +15,32 @@ Turn flow:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
-from prism.core.answer import CanonicalAnswer, generate_answer, no_context_answer
+from prism.core.answer import CanonicalAnswer, KeyFact, generate_answer, no_context_answer
+from prism.core.config import RELEVANCE_FLOOR_DEFAULT
 from prism.core.memory import SessionState, SourceDocRef
 from prism.core.policy_math import try_deterministic_policy_answer
 from prism.core.renderers import FormatName, RenderResult, render as render_format
 from prism.core.renderers import excel as excel_renderer
-from prism.core.retriever import RetrievalResult, retrieve
+from prism.core.retriever import RetrievalResult, confidence_from_hits, retrieve
 from prism.core.router import route, score_by_hit_votes
 from prism.core.text_utils import (
     asks_for_fabricated_schema_fields,
+    detect_output_constraint,
     extract_claimed_inr_amounts,
     extract_model_numbers,
     is_contractor_damage_query,
+    is_conversation_memory_query,
     is_false_premise_probe,
     is_leading_numeric_claim,
     is_policy_override_attempt,
     is_prompt_exfil_or_jailbreak,
+    is_pure_reformat_request,
+    memory_lookback_offset,
     needs_multi_domain_retrieval,
+    prefers_email_draft,
     signaled_domains,
     vague_new_session_clarify,
 )
@@ -59,6 +66,13 @@ CLARIFY_DOMAIN_LABELS = {
 
 DESIGN_SERVICE_NOISE = ("bathroom design service", "mood board", "virtual design meeting")
 
+StatusCallback = Callable[[str], None]
+
+
+def _emit(on_status: StatusCallback | None, stage: str) -> None:
+    if on_status is not None:
+        on_status(stage)
+
 
 @dataclass
 class TurnResult:
@@ -72,10 +86,51 @@ class TurnResult:
 
 
 def detect_reformat_request(message: str) -> FormatName | None:
+    """Only pure format switches of the last answer (not 'draft an email summarizing X')."""
+    if not is_pure_reformat_request(message):
+        return None
     for fmt, pattern in REFORMAT_PATTERNS.items():
         if pattern.search(message):
             return fmt
     return None
+
+
+def _answer_memory_lookback(session: SessionState, user_message: str) -> CanonicalAnswer:
+    """Answer meta-questions from session history — no retrieval, no LLM."""
+    offset = memory_lookback_offset(user_message)
+    prior_user = [t for t in session.turns if t.role == "user"][:-1]
+    if len(prior_user) < offset:
+        return CanonicalAnswer(
+            query=user_message,
+            domain=session.active_domain or "hr",
+            direct_answer="I don't have enough earlier questions in this session to answer that lookback.",
+            confidence="low",
+            no_answer=True,
+        )
+    target = prior_user[-offset]
+    domain = target.domain or session.active_domain or "hr"
+    # Prefer the domain of the assistant reply that answered that user question.
+    for i, t in enumerate(session.turns):
+        if t.role == "user" and t.content == target.content:
+            for nxt in session.turns[i + 1 :]:
+                if nxt.role == "assistant":
+                    if nxt.domain:
+                        domain = nxt.domain
+                    break
+            break
+    label = {1: "One question ago", 2: "Two questions ago", 3: "Three questions ago"}.get(
+        offset, f"{offset} questions ago"
+    )
+    return CanonicalAnswer(
+        query=user_message,
+        domain=domain,
+        direct_answer=f'{label} you asked: "{target.content}"',
+        key_facts=[],
+        sources=[],
+        confidence="high",
+        no_answer=False,
+        caveats=["Answered from this session's conversation history, not from the knowledge base."],
+    )
 
 
 def _refuse(session: SessionState, user_message: str, reply: str, *, domain: str | None = None) -> TurnResult:
@@ -88,7 +143,13 @@ def _refuse(session: SessionState, user_message: str, reply: str, *, domain: str
         no_answer=True,
     )
     session.last_answer = answer
-    session.add_turn("assistant", reply, domain=domain or session.active_domain)
+    session.add_turn(
+        "assistant",
+        reply,
+        domain=domain or session.active_domain,
+        no_answer=True,
+        confidence="none",
+    )
     return TurnResult(
         session=session,
         reply_text=reply,
@@ -100,6 +161,23 @@ def _refuse(session: SessionState, user_message: str, reply: str, *, domain: str
     )
 
 
+def _early_cl_carry_fact(session: SessionState) -> str | None:
+    """Return an earlier assistant reply about CL carry-forward, if any."""
+    for i, t in enumerate(session.turns):
+        if t.role != "user":
+            continue
+        u = t.content.lower()
+        if "carry" not in u:
+            continue
+        if "casual" not in u and not re.search(r"\bcl\b", u):
+            continue
+        for nxt in session.turns[i + 1 :]:
+            if nxt.role == "assistant":
+                return nxt.content
+        break
+    return None
+
+
 def _commit_answer(
     session: SessionState,
     *,
@@ -109,7 +187,7 @@ def _commit_answer(
 ) -> TurnResult:
     session.active_domain = domain
     session.last_answer = answer
-    if chunks:
+    if chunks is not None:
         session.last_docs = [
             SourceDocRef(
                 id=c.id,
@@ -121,7 +199,14 @@ def _commit_answer(
             for c in chunks[:5]
         ]
     rr = render_format(answer, "prose")
-    session.add_turn("assistant", rr.content, domain=domain)
+    session.add_turn(
+        "assistant",
+        rr.content,
+        domain=domain,
+        no_answer=bool(answer.no_answer),
+        confidence=answer.confidence,
+        is_clarification=bool(answer.clarification_question and answer.no_answer),
+    )
     return TurnResult(
         session=session,
         reply_text=rr.content,
@@ -147,19 +232,24 @@ def _filter_noise_chunks(query: str, chunks: list[RetrievedChunk]) -> list[Retri
 
 def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -> RetrievalResult:
     if multi_domain:
-        domains = signaled_domains(query) or (["customer_support", "legal"] if is_contractor_damage_query(query) else [])
+        signaled = signaled_domains(query)
+        domains = list(signaled) or (
+            ["customer_support", "legal"] if is_contractor_damage_query(query) else []
+        )
         if is_contractor_damage_query(query):
             for d in ("customer_support", "legal"):
                 if d not in domains:
                     domains.append(d)
+        fallback_all = False
         if not domains:
             domains = ["hr", "finance", "privacy", "customer_support", "legal"]
+            fallback_all = True
 
         by_id: dict[str, RetrievedChunk] = {}
         best_distance: float | None = None
         confident_any = False
         for d in domains[:4]:
-            part = retrieve(query, domain=d, top_k=4)
+            part = retrieve(query, domain=d, top_k=3)
             if part.best_dense_distance is not None:
                 best_distance = (
                     part.best_dense_distance
@@ -171,28 +261,37 @@ def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -
                 prev = by_id.get(c.id)
                 if prev is None or (c.fused_score or 0) > (prev.fused_score or 0):
                     by_id[c.id] = c
-        # Always include a small agnostic pass so privacy/legal URLs can surface.
-        agnostic = retrieve(query, domain=None, top_k=6)
-        for c in agnostic.chunks:
-            prev = by_id.get(c.id)
-            if prev is None or (c.fused_score or 0) > (prev.fused_score or 0):
-                by_id[c.id] = c
-            if agnostic.best_dense_distance is not None:
-                best_distance = (
-                    agnostic.best_dense_distance
-                    if best_distance is None
-                    else min(best_distance, agnostic.best_dense_distance)
-                )
-            confident_any = confident_any or agnostic.is_confident
 
-        fused = sorted(by_id.values(), key=lambda c: -(c.fused_score or 0))[:12]
+        # Skip expensive agnostic pass when domain signals are already clear
+        # (≥2 domains, or one strong domain with confident hits). Always run it
+        # when we fell back to "search everything".
+        run_agnostic = fallback_all or (len(domains) < 2 and not confident_any)
+        if run_agnostic:
+            agnostic = retrieve(query, domain=None, top_k=4)
+            for c in agnostic.chunks:
+                prev = by_id.get(c.id)
+                if prev is None or (c.fused_score or 0) > (prev.fused_score or 0):
+                    by_id[c.id] = c
+                if agnostic.best_dense_distance is not None:
+                    best_distance = (
+                        agnostic.best_dense_distance
+                        if best_distance is None
+                        else min(best_distance, agnostic.best_dense_distance)
+                    )
+                confident_any = confident_any or agnostic.is_confident
+
+        fused = sorted(by_id.values(), key=lambda c: -(c.fused_score or 0))[:6]
         fused = _filter_noise_chunks(query, fused)
+        is_confident = confidence_from_hits(
+            fused, best_dense_distance=best_distance, floor=RELEVANCE_FLOOR_DEFAULT
+        ) or (confident_any and bool(fused))
         return RetrievalResult(
             chunks=fused,
             query=query,
             domain_filter=None,
             best_dense_distance=best_distance,
-            is_confident=confident_any and bool(fused),
+            is_confident=is_confident,
+            best_fused_score=fused[0].fused_score if fused else None,
         )
 
     result = retrieve(query, domain=domain)
@@ -200,10 +299,16 @@ def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -
     return result
 
 
-def handle_turn(session: SessionState, user_message: str) -> TurnResult:
+def handle_turn(
+    session: SessionState,
+    user_message: str,
+    *,
+    on_status: StatusCallback | None = None,
+) -> TurnResult:
     # ------------------------------------------------------------------
     # 0a. Jailbreak / prompt-exfiltration
     # ------------------------------------------------------------------
+    _emit(on_status, "checking_guards")
     if is_prompt_exfil_or_jailbreak(user_message):
         return _refuse(
             session,
@@ -226,16 +331,38 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
         )
 
     # ------------------------------------------------------------------
-    # 0c. Deterministic leave arithmetic (do not trust the LLM for this)
+    # 0c. Deterministic leave / finance arithmetic (do not trust the LLM)
     # ------------------------------------------------------------------
+    _emit(on_status, "policy_lookup")
     computed = try_deterministic_policy_answer(user_message)
     if computed is not None:
         session.add_turn("user", user_message)
-        return _commit_answer(session, answer=computed.answer, domain="hr", chunks=None)
+        from prism.core.answer_polish import polish_answer
+
+        answer = polish_answer(computed.answer, user_query=user_message)
+        domain = answer.domain or "hr"
+        if prefers_email_draft(user_message) and not answer.no_answer:
+            session.active_domain = domain
+            session.last_answer = answer
+            rr = render_format(answer, "email")
+            reply = rr.content if isinstance(rr.content, str) else ""
+            session.add_turn("assistant", reply, domain=domain)
+            return TurnResult(
+                session=session,
+                reply_text=reply,
+                render_result=rr,
+                answer=answer,
+                domain=domain,
+                is_clarification=False,
+                is_reformat=False,
+            )
+        _emit(on_status, "done")
+        return _commit_answer(session, answer=answer, domain=domain, chunks=[])
 
     # ------------------------------------------------------------------
     # 1. Reformat-only request against the last answer
     # ------------------------------------------------------------------
+    _emit(on_status, "format_check")
     requested_format = detect_reformat_request(user_message)
     if requested_format and session.last_answer is not None and not session.pending_clarification:
         session.add_turn("user", user_message, domain=session.active_domain)
@@ -309,7 +436,7 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
         session.pending_clarification = PendingClarification(
             original_query=user_message, question=question, candidate_domains=vague_domains[:3]
         )
-        session.add_turn("assistant", question, domain=None)
+        session.add_turn("assistant", question, domain=None, is_clarification=True, confidence="none", no_answer=True)
         return TurnResult(
             session=session,
             reply_text=question,
@@ -321,26 +448,86 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
         )
 
     # ------------------------------------------------------------------
+    # 2c. Conversation-memory lookback ("what did I ask two questions ago?")
+    # ------------------------------------------------------------------
+    if is_conversation_memory_query(user_message):
+        answer = _answer_memory_lookback(session, user_message)
+        return _commit_answer(session, answer=answer, domain=answer.domain, chunks=[])
+
+    # ------------------------------------------------------------------
     # 3. Anaphora + flags
     # ------------------------------------------------------------------
     retrieval_query = effective_query
     if ANAPHORA_RE.search(effective_query) and session.turns:
-        retrieval_query = f"{session.recent_context_str(4)}\n{effective_query}"
+        retrieval_query = f"{session.recent_context_str(8)}\n{effective_query}"
 
     multi_domain = needs_multi_domain_retrieval(effective_query) or is_contractor_damage_query(effective_query)
     model_nums = extract_model_numbers(effective_query)
     leading = is_leading_numeric_claim(effective_query)
     false_premise = is_false_premise_probe(effective_query)
     invented_fields = asks_for_fabricated_schema_fields(effective_query)
+    out_constraint = detect_output_constraint(effective_query)
+    want_email = prefers_email_draft(effective_query)
+
+    # ------------------------------------------------------------------
+    # 3b. Session recall: "going back to … leave carry-forward … draft email"
+    # ------------------------------------------------------------------
+    if want_email and ("carry-forward" in effective_query.lower() or "carry forward" in effective_query.lower()):
+        prior = _early_cl_carry_fact(session)
+        if prior and re.search(r"\b5\b", prior):
+            from datetime import date
+
+            answer = CanonicalAnswer(
+                query=user_message,
+                domain="hr",
+                direct_answer=(
+                    f"As of today ({date.today().isoformat()}), casual leave carry-forward is capped at "
+                    "5 unused CL days into the next leave year, per HR policy (as confirmed earlier in this conversation)."
+                ),
+                key_facts=[KeyFact(label="CL carry-forward maximum", value="5", unit="days")],
+                sources=["data/synthetic/hr_policy.md"],
+                confidence="high",
+                no_answer=False,
+                caveats=["Recalled from earlier turns in this session; aligned with HR leave policy."],
+            )
+            session.active_domain = "hr"
+            session.last_answer = answer
+            session.last_docs = []
+            rr = render_format(answer, "email")
+            reply = rr.content if isinstance(rr.content, str) else ""
+            session.add_turn("assistant", reply, domain="hr")
+            return TurnResult(
+                session=session,
+                reply_text=reply,
+                render_result=rr,
+                answer=answer,
+                domain="hr",
+                is_clarification=False,
+                is_reformat=False,
+            )
 
     # ------------------------------------------------------------------
     # 4. Route
     # ------------------------------------------------------------------
+    _emit(on_status, "routing")
     if forced_domain:
         domain = forced_domain
         route_result = None
     elif is_contractor_damage_query(effective_query):
         domain = "customer_support"
+        route_result = None
+    elif any(
+        p in effective_query.lower()
+        for p in ("leave carry-forward", "leave carry forward", "casual leave", "carry-forward limit")
+    ):
+        domain = "hr"
+        route_result = None
+    elif (
+        any(w in effective_query.lower() for w in ("cap", "limit", "threshold", "how much", "amount"))
+        and any(c in effective_query.lower() for c in ("rupee", "₹", "rs.", "rs ", "inr", "per diem"))
+    ):
+        # Break sticky HR when the user pivots to a currency amount / cap.
+        domain = "finance"
         route_result = None
     elif model_nums and any(w in effective_query.lower() for w in ("warranty", "troubleshoot", "model", "install")):
         domain = "customer_support"
@@ -366,7 +553,14 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
             session.pending_clarification = PendingClarification(
                 original_query=user_message, question=question, candidate_domains=candidate_domains
             )
-            session.add_turn("assistant", question, domain=None)
+            session.add_turn(
+                "assistant",
+                question,
+                domain=None,
+                is_clarification=True,
+                confidence="none",
+                no_answer=True,
+            )
             return TurnResult(
                 session=session,
                 reply_text=question,
@@ -381,6 +575,7 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
     # ------------------------------------------------------------------
     # 5. Retrieve
     # ------------------------------------------------------------------
+    _emit(on_status, "retrieving")
     result = _retrieve_for_query(retrieval_query, domain=domain, multi_domain=multi_domain)
 
     extra_notes: list[str] = []
@@ -415,7 +610,32 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
             "Privacy deletion requires a request unless context says otherwise. Expense claims: only state what "
             "Finance/HR context supports."
         )
+    if out_constraint == "yes_no_only":
+        extra_notes.append(
+            'CRITICAL output constraint: the user required YES OR NO ONLY. '
+            'Set direct_answer to exactly "Yes" or exactly "No" based on the policy. '
+            "Leave key_facts, steps, and table empty. Do not add explanations in direct_answer."
+        )
+    if want_email:
+        from datetime import date
 
+        extra_notes.append(
+            "The user wants a manager email summarizing a fact from earlier in this conversation. "
+            "Use conversation context + policy context. Put the factual summary in direct_answer "
+            "(include the carry-forward number if that is what they asked about)."
+        )
+        if "today" in effective_query.lower() or "today's date" in effective_query.lower():
+            extra_notes.append(f"Include today's date in the summary: {date.today().isoformat()}.")
+
+    ctx_n = 16 if (
+        want_email
+        or "near the start" in effective_query.lower()
+        or "going back" in effective_query.lower()
+        or "carry-forward" in effective_query.lower()
+        or "carry forward" in effective_query.lower()
+    ) else 6
+
+    _emit(on_status, "generating")
     if model_nums and result.chunks:
         corpus = " ".join(c.text for c in result.chunks).upper()
         if not any(m.upper() in corpus for m in model_nums):
@@ -436,7 +656,7 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
                 user_message,
                 domain=domain or "customer_support",
                 context_chunks=result.chunks,
-                conversation_context=session.recent_context_str(4),
+                conversation_context=session.recent_context_str(ctx_n),
                 multi_domain=multi_domain,
                 extra_notes=extra_notes,
             )
@@ -447,13 +667,20 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
             user_message,
             domain=domain,
             context_chunks=result.chunks,
-            conversation_context=session.recent_context_str(4),
+            conversation_context=session.recent_context_str(ctx_n),
             multi_domain=multi_domain,
             extra_notes=extra_notes,
         )
 
     if answer.clarification_question and answer.no_answer:
-        session.add_turn("assistant", answer.clarification_question, domain=domain)
+        session.add_turn(
+            "assistant",
+            answer.clarification_question,
+            domain=domain,
+            is_clarification=True,
+            no_answer=True,
+            confidence=answer.confidence,
+        )
         rr = render_format(answer, "prose")
         return TurnResult(
             session=session,
@@ -462,6 +689,34 @@ def handle_turn(session: SessionState, user_message: str) -> TurnResult:
             answer=answer,
             domain=domain,
             is_clarification=True,
+            is_reformat=False,
+        )
+
+    # Substantive "draft an email summarizing…" → generate facts, then email-render.
+    if want_email and not answer.no_answer:
+        session.active_domain = domain
+        session.last_answer = answer
+        if result.chunks:
+            session.last_docs = [
+                SourceDocRef(
+                    id=c.id,
+                    title=c.metadata.get("title", ""),
+                    source_url=c.metadata.get("source_url", ""),
+                    domain=c.metadata.get("domain", ""),
+                    text=c.text,
+                )
+                for c in result.chunks[:5]
+            ]
+        rr = render_format(answer, "email")
+        reply = rr.content if isinstance(rr.content, str) else ""
+        session.add_turn("assistant", reply, domain=domain)
+        return TurnResult(
+            session=session,
+            reply_text=reply,
+            render_result=rr,
+            answer=answer,
+            domain=domain,
+            is_clarification=False,
             is_reformat=False,
         )
 

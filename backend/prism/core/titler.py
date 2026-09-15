@@ -9,11 +9,8 @@ session start, plus optionally once more if the topic shifts domain later.
 
 from __future__ import annotations
 
-import ollama
-
-from prism.core.config import OLLAMA_HOST, TITLE_MODEL
-
-_client = ollama.Client(host=OLLAMA_HOST)
+from prism.core.config import TITLE_MODEL
+from prism.core.ollama_client import get_ollama_client, keep_alive_value
 
 TITLE_SYSTEM_PROMPT = (
     "Generate a short, descriptive chat title (max 6 words, no quotes, no trailing punctuation, no JSON). "
@@ -36,13 +33,14 @@ def _sanitize_title(title: str, fallback_message: str) -> str:
 
 
 def generate_title(first_user_message: str) -> str:
-    resp = _client.chat(
+    resp = get_ollama_client().chat(
         model=TITLE_MODEL,
         messages=[
             {"role": "system", "content": TITLE_SYSTEM_PROMPT},
             {"role": "user", "content": first_user_message[:500]},
         ],
         options={"temperature": 0.3, "num_predict": 20},
+        keep_alive=keep_alive_value(),
     )
     return _sanitize_title(resp["message"]["content"], first_user_message)
 

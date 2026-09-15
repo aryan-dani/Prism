@@ -19,6 +19,9 @@ Built for the Kohler-MITWPU AI Research Lab case study challenge (individual sub
 | **Dynamic output formats** | One canonical answer object → prose / JSON / XML / Excel / email without re-retrieval |
 | **Local-first** | Ollama + embedded Chroma; no cloud LLM, no separate vector DB server |
 
+**Architecture map:** [`docs/architecture.md`](docs/architecture.md) — system diagram, five knowledge bases (sources + ingest), turn pipeline, module index, improvement roadmap.  
+**Decision log:** [`docs/decisions.md`](docs/decisions.md) · **Prompts / workflows:** [`docs/prompts.md`](docs/prompts.md)
+
 ---
 
 ## Quick start
@@ -63,6 +66,12 @@ Processed JSONL for all five domains is in `backend/data/processed/`. Build (or 
 cd backend
 uv run python -m prism.ingest.build_index
 cd ..
+```
+
+Or from the repo root (fails loudly if any domain JSONL is missing/empty):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/rebuild_index.ps1
 ```
 
 Expected: **~497 chunks** indexed into collection `prism_kb`.
@@ -208,6 +217,7 @@ Validation reports: [`backend/eval/results/validation_summary.md`](backend/eval/
 | Requirement | Location |
 |---|---|
 | Working prototype | This repo — see Quick start |
+| Architecture overview | [`docs/architecture.md`](docs/architecture.md) |
 | Prompts documentation (PDF) | [`docs/pdf/prompts.pdf`](docs/pdf/prompts.pdf) · source [`docs/prompts.md`](docs/prompts.md) |
 | Presentation deck (≤4 slides) | Outline [`docs/deck.md`](docs/deck.md) · PDF [`docs/pdf/deck.pdf`](docs/pdf/deck.pdf) |
 | Demo video (1–3 min) | Script: [`docs/demo_script.md`](docs/demo_script.md) — *add link here after upload* |
@@ -252,6 +262,7 @@ Academic use only — read-only crawl for this case study; do not republish the 
 | `PRISM_GEN_MODEL` | `qwen2.5:7b-instruct` | Answer generation |
 | `PRISM_EMBED_MODEL` | `nomic-embed-text` | Embeddings / routing |
 | `PRISM_TITLE_MODEL` | `qwen2.5:3b-instruct` | Session titles |
+| `PRISM_OLLAMA_KEEP_ALIVE` | `25m` | Keep Ollama models warm between turns (`-1` = forever) |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama endpoint |
 
 ---

@@ -6,7 +6,7 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
-function Free-Port([int]$port, [string]$serviceName) {
+function Clear-Port([int]$port, [string]$serviceName) {
     $connections = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
     if ($connections) {
         $pids = $connections | Select-Object -ExpandProperty OwningProcess -Unique | Where-Object { $_ -gt 4 }
@@ -25,8 +25,8 @@ function Free-Port([int]$port, [string]$serviceName) {
 }
 
 # 1. Clean up existing processes if already running
-Free-Port 8000 "Backend API"
-Free-Port 5173 "Frontend UI"
+Clear-Port 8000 "Backend API"
+Clear-Port 5173 "Frontend UI"
 
 # 2. Launch Backend API in a new terminal window
 Write-Host "==> Launching Prism Backend API on http://127.0.0.1:8000 ..." -ForegroundColor Cyan

@@ -263,6 +263,40 @@ button {
   color: var(--warn);
 }
 
+.chip.conf.ok {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.chip.conf.mid {
+  background: #efe9d8;
+  color: #6a5a2e;
+}
+
+.chip.conf.warn {
+  background: #f7e7d4;
+  color: var(--warn);
+}
+
+.health-pill {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.health-pill.ok {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.health-pill.degraded {
+  background: #f7e7d4;
+  color: var(--warn);
+}
+
 .messages {
   overflow-y: auto;
   overflow-x: hidden;
@@ -342,6 +376,30 @@ button {
 .bubble.clarify {
   border-color: #e2c49a;
   background: #fff8ef;
+}
+
+.bubble.no-answer {
+  border-color: #d4b8b8;
+  background: #fbf5f5;
+}
+
+.answer-banner {
+  margin: -0.15rem 0 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.clarify-banner {
+  background: #f3e2c7;
+  color: #6a4510;
+}
+
+.honesty-banner {
+  background: #f0dede;
+  color: #6b2f2f;
 }
 
 .meta-row {

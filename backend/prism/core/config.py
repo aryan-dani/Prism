@@ -60,12 +60,21 @@ ROUTER_AMBIGUITY_MARGIN = 0.04
 # enough to route confidently -> falls back to domain-agnostic retrieval.
 ROUTER_MIN_CONFIDENCE = 0.30
 
+# Keep generation/embed models warm in Ollama between turns (reduces cold-load
+# spikes on 8GB VRAM). Override with e.g. PRISM_OLLAMA_KEEP_ALIVE=10m or -1 (forever).
+OLLAMA_KEEP_ALIVE = os.environ.get("PRISM_OLLAMA_KEEP_ALIVE", "25m")
+
 # Relevance floor for the "no confident answer" honesty path. Distances are
 # cosine distances from Chroma (0 = identical). Legal/Privacy get a stricter
 # (lower distance = higher required similarity) floor than other domains.
 RELEVANCE_FLOOR_DEFAULT = 0.55
 RELEVANCE_FLOOR_STRICT = 0.45
 STRICT_DOMAINS = {"legal", "privacy"}
+# Lexical / dual-signal confidence: top fused hit also ranked in BM25 top-N,
+# or RRF score implying it appeared reasonably in both lists. Lets exact-token
+# Finance/CS hits (₹ amounts, model numbers) pass when dense alone is weak.
+SPARSE_RANK_CONFIDENCE_MAX = 2
+FUSED_SCORE_DUAL_MIN = (1.0 / (RRF_K + 1)) + (1.0 / (RRF_K + 10))
 
 # ---------------------------------------------------------------------------
 # Scraping

@@ -4,6 +4,9 @@ Running log of every non-obvious technical decision, why it was made, and what
 was verified before committing to it. Written as we go, not reconstructed at
 the end — timestamps are approximate build order, not wall-clock.
 
+For the **system map** (components, five knowledge bases, turn pipeline,
+roadmap), see [`architecture.md`](architecture.md).
+
 ## Hardware budget (read this first)
 
 Target machine: RTX 5070 Laptop, **8151 MiB VRAM total**, confirmed via

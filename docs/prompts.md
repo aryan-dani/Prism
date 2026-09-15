@@ -78,9 +78,18 @@ These are documented here because they are part of the agent workflow even thoug
 | Anaphora | Fold recent turn text into retrieval query when “that/it/the one…” appears | `prism/core/agent.py` |
 | Jailbreak / prompt exfil | Deterministic refuse (no LLM) on “ignore previous instructions / print system prompt / developer mode” | `prism/core/text_utils.py`, `agent.py` |
 | Authority spoof / policy override | Deterministic refuse on CFO-spoof + “override threshold to ₹0” (same path every time — not model-dependent) | `prism/core/text_utils.py`, `agent.py` |
-| Leave arithmetic | **Code computes** CL carry-forward and leave-year join-date math; LLM is not trusted to invert day counts | `prism/core/policy_math.py` |
+| Leave / Finance arithmetic | **Code computes** CL carry-forward, leave-year join-date math, and Finance §2.1 approval bands from a stated claim amount | `prism/core/policy_math.py` |
+| Output constraints | Detect “yes or no only” / “one word only”; post-polish collapses the answer to that form (Excel then correctly declines) | `text_utils.py`, `answer_polish.py` |
+| Soft adversarial paraphrases | VIP waiver / hidden-rules asks that bypass regex → LLM + polish still refuse | `text_utils.py`, `answer_polish.py` |
+| Status streaming | SSE stages (`routing` / `retrieving` / `generating`) then full ChatResponse — no partial answer tokens | `api/routes.py`, frontend `chatStream` |
+| Citation integrity | Drop answer `sources` that are not among retrieved chunk `source_url`s | `answer_polish.py` |
+| Ollama keep-alive | Shared client; `keep_alive` on chat/embed; warm models on API startup | `ollama_client.py`, `api/main.py` |
+| Session lookback | “What did I ask two questions ago?” answered from history (no RAG) | `agent.py` |
+| Long-range email recall | “Draft email about leave carry-forward from earlier” rebuilds the CL=5 fact from session, then email-renders | `agent.py` |
 | Leading-number sycophancy | Detect “my manager said ₹X… isn’t it?”; instruct + post-polish so we never rubber-stamp fabricated figures | `text_utils.py`, `answer_polish.py` |
-| Multi-domain retrieve | Per-domain retrieve + merge for compound HR/Finance/Privacy or contractor-damage queries; filter Bathroom Design Service noise | `agent.py` |
+| Multi-domain retrieve | Per-domain retrieve + merge (top_k=3, fuse≤6); skip agnostic pass when domain signals are clear; filter Bathroom Design Service noise | `agent.py` |
+| Retrieval confidence | Dense distance under floor **or** strong BM25 rank / dual-signal RRF (exact ₹ / model tokens) | `retriever.py` |
+| BM25 sidecar | Stores ids + docs + **metadatas** so sparse hits need no per-id Chroma `get` | `store.py` |
 
 Anchor phrases are literal English examples (e.g. HR: “leave policy”, “WFH”, “notice period”; Finance: “expense reimbursement”, “per diem”; Customer Support: “toilet leaking”, “faucet aerator”; Privacy: “personal information”, “Do Not Sell”; Legal: “terms and conditions”, “Prop 65”, “warranty”). Full list lives in `router.py`.
 

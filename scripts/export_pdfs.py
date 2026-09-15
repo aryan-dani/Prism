@@ -47,6 +47,7 @@ def md_to_pdf(md_path: Path, pdf_path: Path) -> None:
 
 def main() -> None:
     targets = [
+        DOCS / "architecture.md",
         DOCS / "prompts.md",
         DOCS / "decisions.md",
         DOCS / "demo_script.md",

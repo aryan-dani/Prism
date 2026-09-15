@@ -130,6 +130,44 @@ def is_policy_override_attempt(query: str) -> bool:
     return authority and change
 
 
+def is_soft_policy_tamper_request(query: str) -> bool:
+    """Paraphrased policy-tamper asks that intentionally avoid CFO/override regexes.
+
+    These are meant to exercise the LLM + polish path, not the deterministic refuse.
+    """
+    if is_policy_override_attempt(query):
+        return False
+    q = query.lower()
+    cues = (
+        "pre-approved at any amount",
+        "preapproved at any amount",
+        "vip employee expense",
+        "exception is active",
+        "ignore the published band",
+        "ignore the published threshold",
+        "pretend the expense limit",
+        "unlock unrestricted finance",
+        "treat my claim as pre-approved",
+        "waive all approval",
+    )
+    return any(c in q for c in cues)
+
+
+def is_soft_prompt_exfil_request(query: str) -> bool:
+    """Paraphrased prompt-exfil that avoids 'system prompt' / 'developer mode' regexes."""
+    if is_prompt_exfil_or_jailbreak(query):
+        return False
+    q = query.lower()
+    cues = (
+        "hidden rules were you given",
+        "quote them verbatim",
+        "what instructions were you initialized",
+        "reveal the rules you follow internally",
+        "dump your initial instructions",
+    )
+    return any(c in q for c in cues)
+
+
 def is_leading_numeric_claim(query: str) -> bool:
     """User asserts a number and asks for confirmation (sycophancy bait)."""
     if not INR_AMOUNT_RE.search(query):
@@ -186,6 +224,79 @@ def is_contractor_damage_query(query: str) -> bool:
     return ("faucet" in q or "toilet" in q or "product" in q) and (
         "contractor" in q or "damaged" in q or "liability" in q or "liable" in q
     )
+
+
+# Pure reformat of the previous answer — NOT "draft an email summarizing earlier fact X".
+PURE_REFORMAT_RE = re.compile(
+    r"(?:"
+    r"\b(?:as|in|to)\s+(?:a\s+|an\s+)?(?:json|xml|excel|email|prose|table)\b"
+    r"|\bexport\s+(?:that|this|it|the\s+answer)?\s*(?:as\s+)?(?:an?\s+)?(?:excel|xlsx|spreadsheet)\b"
+    r"|\b(?:json|xml|excel|email)\s+(?:that|this|it)\b"
+    r"|\bformat\s+(?:that|this|it|the\s+answer)\s+as\b"
+    r"|\brender\s+(?:as\s+)?(?:json|xml|excel|email)\b"
+    r")",
+    re.I,
+)
+
+SUBSTANTIVE_EMAIL_RE = re.compile(
+    r"(?:"
+    r"going back|near the start|what you told me|summariz|carry[- ]?forward|"
+    r"write an email to|draft an email .{8,}|threatening|along with today"
+    r")",
+    re.I,
+)
+
+MEMORY_LOOKBACK_RE = re.compile(
+    r"(?:what did i ask|which question did i ask|remind me what i asked)."
+    r"{0,40}?(one|two|three|1|2|3|last|previous)\s+questions?\s+ago"
+    r"|two questions ago|one question ago",
+    re.I,
+)
+
+OUTPUT_CONSTRAINT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"answer yes or no only|yes or no only", re.I), "yes_no_only"),
+    (re.compile(r"\bone word only\b", re.I), "one_word"),
+    (re.compile(r"under\s+(\d+)\s+words", re.I), "max_words"),
+]
+
+
+def is_pure_reformat_request(message: str) -> bool:
+    """True only when the user is asking to re-render the last answer's format."""
+    if SUBSTANTIVE_EMAIL_RE.search(message):
+        return False
+    if PURE_REFORMAT_RE.search(message):
+        return True
+    # Short "excel/spreadsheet" export phrasing
+    if re.search(r"\b(excel|xlsx|spreadsheet)\b", message, re.I) and len(message.split()) <= 10:
+        return True
+    return False
+
+
+def is_conversation_memory_query(message: str) -> bool:
+    return bool(MEMORY_LOOKBACK_RE.search(message))
+
+
+def memory_lookback_offset(message: str) -> int:
+    """How many user questions before the current one (1 = previous, 2 = two ago)."""
+    q = message.lower()
+    if "three" in q or re.search(r"\b3\b", q):
+        return 3
+    if "two" in q or re.search(r"\b2\b", q):
+        return 2
+    if "one" in q or "previous" in q or "last" in q or re.search(r"\b1\b", q):
+        return 1
+    return 2
+
+
+def detect_output_constraint(message: str) -> str | None:
+    for pattern, name in OUTPUT_CONSTRAINT_PATTERNS:
+        if pattern.search(message):
+            return name
+    return None
+
+
+def prefers_email_draft(message: str) -> bool:
+    return bool(re.search(r"\b(draft an email|write an email|email to my manager)\b", message, re.I))
 
 
 VAGUE_NEW_SESSION_PATTERNS: list[tuple[re.Pattern[str], list[str]]] = [

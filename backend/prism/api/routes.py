@@ -13,11 +13,15 @@ documented in docs/decisions.md.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
+import json
+from queue import Empty, SimpleQueue
+from threading import Thread
+
 from prism.core.agent import handle_turn
-from prism.core.config import RuntimeInfo
+from prism.core.config import EMBED_MODEL, GEN_MODEL, OLLAMA_HOST, TITLE_MODEL, RuntimeInfo
 from prism.core.memory import get_session_store
 from prism.core.renderers import available_formats, render as render_format
 from prism.core.store import get_store
@@ -52,17 +56,58 @@ class RenderRequest(BaseModel):
     format: str
 
 
+def _ollama_status() -> dict:
+    """Ping Ollama and check that required models are present."""
+    import httpx
+
+    required = [EMBED_MODEL, GEN_MODEL, TITLE_MODEL]
+    try:
+        with httpx.Client(base_url=OLLAMA_HOST, timeout=3.0) as client:
+            resp = client.get("/api/tags")
+            resp.raise_for_status()
+            names = {m.get("name") for m in (resp.json().get("models") or []) if m.get("name")}
+        # Ollama tags may be "model:tag" — also accept bare name prefix matches.
+        def present(need: str) -> bool:
+            if need in names:
+                return True
+            return any(n == need or n.startswith(need + ":") or need.startswith(n.split(":")[0]) for n in names)
+
+        missing = [m for m in required if not present(m)]
+        return {
+            "reachable": True,
+            "host": OLLAMA_HOST,
+            "models_required": required,
+            "models_missing": missing,
+            "ok": not missing,
+        }
+    except Exception as e:
+        return {
+            "reachable": False,
+            "host": OLLAMA_HOST,
+            "models_required": required,
+            "models_missing": required,
+            "ok": False,
+            "error": str(e)[:300],
+        }
+
+
 @router.get("/health")
 def health():
     store = get_store()
     info = RuntimeInfo()
+    ollama = _ollama_status()
+    chunks = store.count()
+    status = "ok" if ollama.get("ok") and chunks > 0 else "degraded"
+    if not ollama.get("reachable"):
+        status = "degraded"
     return {
-        "status": "ok",
-        "chunks_indexed": store.count(),
+        "status": status,
+        "chunks_indexed": chunks,
         "embed_model": info.embed_model,
         "gen_model": info.gen_model,
         "title_model": info.title_model,
         "domains": info.domains,
+        "ollama": ollama,
     }
 
 
@@ -134,6 +179,10 @@ def chat(session_id: str, req: ChatRequest):
 
     store.save(state)
 
+    return _chat_response(session_id, state, result)
+
+
+def _chat_response(session_id: str, state, result) -> ChatResponse:
     sources = [
         {"id": d.id, "title": d.title, "source_url": d.source_url, "domain": d.domain} for d in state.last_docs
     ]
@@ -155,6 +204,75 @@ def chat(session_id: str, req: ChatRequest):
         available_formats=formats,
         title=state.title,
     )
+
+
+def _sse(event: str, data: dict | str) -> str:
+    payload = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False)
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+@router.post("/sessions/{session_id}/chat/stream")
+def chat_stream(session_id: str, req: ChatRequest):
+    """SSE status tokens, then a final `result` event with the same ChatResponse JSON.
+
+    Does not stream partial answer tokens — CanonicalAnswer must validate fully first.
+    """
+    store = get_session_store()
+    state = store.load(session_id)
+    if state is None:
+        raise HTTPException(404, "session not found")
+
+    was_first_exchange = len(state.turns) == 0
+    prev_domain = state.active_domain
+    q: SimpleQueue = SimpleQueue()
+
+    def on_status(stage: str) -> None:
+        q.put(("status", {"stage": stage}))
+
+    def worker() -> None:
+        try:
+            result = handle_turn(state, req.message, on_status=on_status)
+            q.put(("status", {"stage": "titling"}))
+            if was_first_exchange and not result.is_clarification:
+                try:
+                    state.title = generate_title(req.message)
+                except Exception:
+                    state.title = req.message[:40]
+            elif result.domain and prev_domain and result.domain != prev_domain and not result.is_reformat:
+                try:
+                    new_title = maybe_retitle(
+                        current_title=state.title,
+                        new_domain=result.domain,
+                        first_message_of_new_domain=req.message,
+                    )
+                    if new_title:
+                        state.title = new_title
+                except Exception:
+                    pass
+            store.save(state)
+            resp = _chat_response(session_id, state, result)
+            q.put(("result", resp.model_dump()))
+        except Exception as e:
+            q.put(("error", {"message": str(e)[:500]}))
+        finally:
+            q.put(None)
+
+    Thread(target=worker, daemon=True).start()
+
+    def event_gen():
+        yield _sse("status", {"stage": "received"})
+        while True:
+            try:
+                item = q.get(timeout=180)
+            except Empty:
+                yield _sse("error", {"message": "timeout waiting for agent"})
+                break
+            if item is None:
+                break
+            event, data = item
+            yield _sse(event, data)
+
+    return StreamingResponse(event_gen(), media_type="text/event-stream")
 
 
 @router.post("/sessions/{session_id}/render")

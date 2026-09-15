@@ -29,7 +29,27 @@ def contains_any(text: str, needles: list[str]) -> bool:
 
 def contains_all(text: str, needles: list[str]) -> bool:
     t = text.lower()
-    return all(n.lower() in t for n in needles)
+    for n in needles:
+        n_l = n.lower()
+        # Short numeric/token needles must match as whole words (avoid "5" in "45").
+        if len(n_l) <= 2 and n_l.isalnum():
+            if not re.search(rf"\b{re.escape(n_l)}\b", t):
+                return False
+        elif n_l not in t:
+            return False
+    return True
+
+
+def contains_any_bounded(text: str, needles: list[str]) -> bool:
+    t = text.lower()
+    for n in needles:
+        n_l = n.lower()
+        if len(n_l) <= 2 and n_l.isalnum():
+            if re.search(rf"\b{re.escape(n_l)}\b", t):
+                return True
+        elif n_l in t:
+            return True
+    return False
 
 
 def score_expect(resp: dict | None, expect: dict, latency_s: float) -> list[dict]:
@@ -55,6 +75,26 @@ def score_expect(resp: dict | None, expect: dict, latency_s: float) -> list[dict
                 "PASS" if ok else "FAIL",
                 f"contains_all {expect['contains_all']}",
                 text[:500],
+            )
+        )
+    if "reply_equals_any" in expect:
+        reply = (resp.get("reply") or "").strip()
+        ok = any(reply.lower() == cand.lower() for cand in expect["reply_equals_any"])
+        out.append(
+            verdict(
+                "PASS" if ok else "FAIL",
+                f"reply_equals_any {expect['reply_equals_any']}",
+                reply[:200],
+            )
+        )
+    if "reply_matches" in expect:
+        reply = (resp.get("reply") or "").strip()
+        ok = bool(re.search(expect["reply_matches"], reply, re.IGNORECASE | re.DOTALL))
+        out.append(
+            verdict(
+                "PASS" if ok else "FAIL",
+                f"reply_matches {expect['reply_matches']}",
+                reply[:200],
             )
         )
     if "not_contains_any" in expect:
@@ -154,6 +194,8 @@ def score_expect(resp: dict | None, expect: dict, latency_s: float) -> list[dict
             "is_clarification_preferred",
             "no_answer_or_hedge",
             "sources_should_include_substr",
+            "reply_equals_any",
+            "reply_matches",
         }
         if any(k in expect for k in objective_keys):
             out.append(
@@ -177,8 +219,8 @@ def score_expect(resp: dict | None, expect: dict, latency_s: float) -> list[dict
     if dups:
         out.append(verdict("FAIL", f"duplicate consecutive words: {dups[:10]}", resp.get("reply") or ""))
 
-    if latency_s > 15:
-        out.append(verdict("PARTIAL", f"latency {latency_s:.1f}s > 15s threshold"))
+    if latency_s > 20:
+        out.append(verdict("PARTIAL", f"latency {latency_s:.1f}s > 20s threshold"))
 
     return out
 

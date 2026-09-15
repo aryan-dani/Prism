@@ -16,11 +16,9 @@ import hashlib
 import json
 from pathlib import Path
 
-import ollama
+from prism.core.config import CHROMA_DIR, EMBED_MODEL
+from prism.core.ollama_client import get_ollama_client, keep_alive_value
 
-from prism.core.config import CHROMA_DIR, EMBED_MODEL, OLLAMA_HOST
-
-_client = ollama.Client(host=OLLAMA_HOST)
 _CACHE_PATH = CHROMA_DIR / "_embed_cache.jsonl"
 _cache: dict[str, list[float]] | None = None
 
@@ -56,7 +54,8 @@ def embed_one(text: str) -> list[float]:
     h = _content_hash(text)
     if h in cache:
         return cache[h]
-    resp = _client.embeddings(model=EMBED_MODEL, prompt=text)
+    client = get_ollama_client()
+    resp = client.embeddings(model=EMBED_MODEL, prompt=text, keep_alive=keep_alive_value())
     embedding = resp["embedding"]
     cache[h] = embedding
     _append_cache(h, embedding)

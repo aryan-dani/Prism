@@ -1,6 +1,10 @@
 """Hybrid (dense + BM25) retrieval with reciprocal-rank fusion, domain
 scoping, and a relevance floor that powers the "no confident answer" honesty
 path (Piece 7 / 2b).
+
+Confidence uses dense distance **or** strong lexical / dual-signal fused
+scores so exact-token hits (₹ bands, model numbers) are not false-negatived
+when embeddings alone are weak.
 """
 
 from __future__ import annotations
@@ -8,11 +12,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from prism.core.config import (
+    FUSED_SCORE_DUAL_MIN,
     RELEVANCE_FLOOR_DEFAULT,
     RELEVANCE_FLOOR_STRICT,
     RETRIEVAL_CANDIDATE_K,
     RETRIEVAL_TOP_K,
     RRF_K,
+    SPARSE_RANK_CONFIDENCE_MAX,
     STRICT_DOMAINS,
 )
 from prism.core.embeddings import embed_one
@@ -27,6 +33,7 @@ class RetrievalResult:
     best_dense_distance: float | None
     is_confident: bool
     relevance_floor_used: float = field(default=RELEVANCE_FLOOR_DEFAULT)
+    best_fused_score: float | None = None
 
 
 def _rrf_fuse(dense: list[RetrievedChunk], sparse: list[RetrievedChunk], *, k: int = RRF_K) -> list[RetrievedChunk]:
@@ -52,6 +59,22 @@ def _rrf_fuse(dense: list[RetrievedChunk], sparse: list[RetrievedChunk], *, k: i
         chunk.fused_score = scores[i]
         fused.append(chunk)
     return fused
+
+
+def confidence_from_hits(
+    chunks: list[RetrievedChunk],
+    *,
+    best_dense_distance: float | None,
+    floor: float,
+) -> bool:
+    """True when dense similarity OR strong BM25 / dual-signal RRF supports answering."""
+    if not chunks:
+        return False
+    dense_ok = best_dense_distance is not None and best_dense_distance <= floor
+    top = chunks[0]
+    lexical_ok = top.sparse_rank is not None and top.sparse_rank <= SPARSE_RANK_CONFIDENCE_MAX
+    dual_ok = (top.fused_score or 0.0) >= FUSED_SCORE_DUAL_MIN
+    return dense_ok or lexical_ok or dual_ok
 
 
 def retrieve(
@@ -85,7 +108,8 @@ def retrieve(
             best_distance = min(distances)
 
     floor = RELEVANCE_FLOOR_STRICT if domain in STRICT_DOMAINS else RELEVANCE_FLOOR_DEFAULT
-    is_confident = best_distance is not None and best_distance <= floor
+    is_confident = confidence_from_hits(fused, best_dense_distance=best_distance, floor=floor)
+    best_fused = fused[0].fused_score if fused else None
 
     return RetrievalResult(
         chunks=fused,
@@ -94,6 +118,7 @@ def retrieve(
         best_dense_distance=best_distance,
         is_confident=is_confident,
         relevance_floor_used=floor,
+        best_fused_score=best_fused,
     )
 
 

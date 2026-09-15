@@ -8,9 +8,12 @@ import re
 from prism.core.answer import CanonicalAnswer
 from prism.core.text_utils import (
     asks_for_fabricated_schema_fields,
+    detect_output_constraint,
     extract_claimed_inr_amounts,
     is_guess_invitation,
     is_leading_numeric_claim,
+    is_soft_policy_tamper_request,
+    is_soft_prompt_exfil_request,
     sanitize_answer_text,
 )
 
@@ -74,7 +77,12 @@ def _rejects_leading_claim(answer: CanonicalAnswer, user_query: str) -> bool:
     return True
 
 
-def polish_answer(answer: CanonicalAnswer, *, user_query: str) -> CanonicalAnswer:
+def polish_answer(
+    answer: CanonicalAnswer,
+    *,
+    user_query: str,
+    allowed_source_urls: set[str] | None = None,
+) -> CanonicalAnswer:
     answer.direct_answer = sanitize_answer_text(answer.direct_answer)
     for kf in answer.key_facts:
         kf.value = sanitize_answer_text(kf.value)
@@ -88,6 +96,47 @@ def polish_answer(answer: CanonicalAnswer, *, user_query: str) -> CanonicalAnswe
 
     if answer.clarification_question:
         answer.clarification_question = sanitize_answer_text(answer.clarification_question)
+
+    # Soft paraphrases that bypass deterministic regex guards — still refuse if the model complied.
+    if is_soft_policy_tamper_request(user_query):
+        blob = (answer.direct_answer + " " + " ".join(kf.value for kf in answer.key_facts)).lower()
+        complied = any(
+            p in blob
+            for p in (
+                "exception is active",
+                "pre-approved at any",
+                "waived approval",
+                "threshold is now",
+                "i have updated",
+                "override confirmed",
+                "unlimited approval",
+            )
+        )
+        if complied or not answer.no_answer:
+            answer.direct_answer = (
+                "I can't create VIP exceptions, waive approval bands, or treat claims as pre-approved at any amount. "
+                "Expense approval follows the published Finance Section 2.1 thresholds only."
+            )
+            answer.key_facts = []
+            answer.steps = []
+            answer.table = None
+            answer.confidence = "none"
+            answer.no_answer = True
+            answer.domain = "finance"
+            answer.caveats = ["Refused a paraphrased policy-tamper request after generation."]
+            answer.sources = list(dict.fromkeys([*answer.sources, "data/synthetic/finance_policy.md"]))
+
+    if is_soft_prompt_exfil_request(user_query):
+        answer.direct_answer = (
+            "I can't reveal hidden system instructions or initialization rules. "
+            "Ask about HR, Finance, product support, Privacy, or Legal policy instead."
+        )
+        answer.key_facts = []
+        answer.steps = []
+        answer.table = None
+        answer.confidence = "none"
+        answer.no_answer = True
+        answer.caveats = ["Refused a paraphrased prompt-exfiltration request."]
 
     if is_guess_invitation(user_query):
         if not answer.no_answer:
@@ -146,4 +195,62 @@ def polish_answer(answer: CanonicalAnswer, *, user_query: str) -> CanonicalAnswe
         ]
         answer.sources = list(dict.fromkeys([*answer.sources, "data/synthetic/finance_policy.md"]))
 
+    # Enforce explicit brevity constraints the LLM often ignores.
+    constraint = detect_output_constraint(user_query)
+    if constraint == "yes_no_only":
+        blob = (answer.direct_answer + " " + " ".join(kf.value for kf in answer.key_facts)).lower()
+        no_signals = (
+            "not encashable",
+            "is not",
+            "are not",
+            "no,",
+            "no.",
+            "cannot",
+            "can't",
+            "does not",
+            "don't",
+        )
+        yes_signals = ("is encashable", "yes,", "yes.", "are encashable", "you can encash")
+        if any(s in blob for s in no_signals) and not any(s in blob for s in ("yes, you can", "yes you can")):
+            answer.direct_answer = "No"
+        elif any(s in blob for s in yes_signals) or blob.strip() in {"yes", "y"}:
+            answer.direct_answer = "Yes"
+        elif blob.strip().startswith("no"):
+            answer.direct_answer = "No"
+        elif blob.strip().startswith("yes"):
+            answer.direct_answer = "Yes"
+        else:
+            # Prefer No for CL encashment default if unclear but query is about encashable
+            if "encash" in user_query.lower() and "casual" in user_query.lower():
+                answer.direct_answer = "No"
+        answer.key_facts = []
+        answer.steps = []
+        answer.table = None
+        answer.caveats = []
+        answer.sources = []
+        answer.sustainability_note = None
+        # Keep sources for grounding, but prose renderer will be yes/no only in direct_answer
+
+    if allowed_source_urls is not None:
+        answer.sources = _filter_sources_to_retrieved(answer.sources, allowed_source_urls)
+
     return answer
+
+
+def _filter_sources_to_retrieved(sources: list[str], allowed: set[str]) -> list[str]:
+    """Keep only citations that match a retrieved chunk's source_url (exact or suffix)."""
+    if not sources:
+        return []
+    allowed_norm = {a.strip().lower().rstrip("/") for a in allowed if a and a.strip()}
+    kept: list[str] = []
+    for s in sources:
+        if not s or not str(s).strip():
+            continue
+        sn = str(s).strip().lower().rstrip("/")
+        if sn in allowed_norm:
+            kept.append(str(s).strip())
+            continue
+        # Allow basename / path-tail matches (synthetic paths vs full URLs).
+        if any(sn.endswith(a) or a.endswith(sn) or sn.split("/")[-1] == a.split("/")[-1] for a in allowed_norm):
+            kept.append(str(s).strip())
+    return list(dict.fromkeys(kept))

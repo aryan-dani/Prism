@@ -5,12 +5,15 @@ Each session tracks: recent turn history, the currently active domain
 documents, the last canonical structured answer (so reformat requests don't
 need to re-run retrieval or the answer LLM call, per 2d), and any pending
 clarification question.
+
+SQLite access is serialized with an RLock + WAL so concurrent chat/stream
+requests (multi-tab / multi-user demo) don't corrupt the DB.
 """
 
 from __future__ import annotations
 
-import json
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +28,9 @@ class Turn(BaseModel):
     role: str  # "user" | "assistant"
     content: str
     domain: str | None = None
+    is_clarification: bool = False
+    no_answer: bool = False
+    confidence: str | None = None
     timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -53,11 +59,34 @@ class SessionState(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
-    def add_turn(self, role: str, content: str, domain: str | None = None, *, max_history: int = 20) -> None:
-        self.turns.append(Turn(role=role, content=content, domain=domain))
+    def add_turn(
+        self,
+        role: str,
+        content: str,
+        domain: str | None = None,
+        *,
+        max_history: int = 48,
+        is_clarification: bool = False,
+        no_answer: bool = False,
+        confidence: str | None = None,
+    ) -> None:
+        """Keep enough turns for long multi-domain demos (12+ user exchanges)."""
+        self.turns.append(
+            Turn(
+                role=role,
+                content=content,
+                domain=domain,
+                is_clarification=is_clarification,
+                no_answer=no_answer,
+                confidence=confidence,
+            )
+        )
         if len(self.turns) > max_history:
             self.turns = self.turns[-max_history:]
         self.updated_at = datetime.now(timezone.utc).isoformat()
+
+    def user_turns(self) -> list[Turn]:
+        return [t for t in self.turns if t.role == "user"]
 
     def recent_context_str(self, n: int = 6) -> str:
         recent = self.turns[-n:]
@@ -67,22 +96,31 @@ class SessionState(BaseModel):
 class SessionStore:
     def __init__(self, db_path: Path = SESSIONS_DB):
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        self._lock = threading.RLock()
+        self._conn = sqlite3.connect(
+            str(db_path),
+            check_same_thread=False,
+            timeout=30.0,
+            isolation_level=None,  # autocommit; we still use explicit BEGIN for writes
+        )
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=30000")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
         self._init_schema()
 
     def _init_schema(self) -> None:
-        self._conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS sessions (
-                id TEXT PRIMARY KEY,
-                title TEXT,
-                state_json TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+        with self._lock:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    title TEXT,
+                    state_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
             )
-            """
-        )
-        self._conn.commit()
 
     def create(self) -> SessionState:
         session_id = str(uuid.uuid4())
@@ -91,26 +129,45 @@ class SessionStore:
         return state
 
     def save(self, state: SessionState) -> None:
-        self._conn.execute(
-            """
-            INSERT INTO sessions (id, title, state_json, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET title=excluded.title, state_json=excluded.state_json, updated_at=excluded.updated_at
-            """,
-            (state.session_id, state.title, state.model_dump_json(), state.created_at, state.updated_at),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._conn.execute(
+                    """
+                    INSERT INTO sessions (id, title, state_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        title=excluded.title,
+                        state_json=excluded.state_json,
+                        updated_at=excluded.updated_at
+                    """,
+                    (
+                        state.session_id,
+                        state.title,
+                        state.model_dump_json(),
+                        state.created_at,
+                        state.updated_at,
+                    ),
+                )
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
 
     def load(self, session_id: str) -> SessionState | None:
-        row = self._conn.execute("SELECT state_json FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT state_json FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
         if not row:
             return None
         return SessionState.model_validate_json(row[0])
 
     def list_sessions(self) -> list[dict]:
-        rows = self._conn.execute(
-            "SELECT id, title, created_at, updated_at, state_json FROM sessions ORDER BY updated_at DESC"
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, title, created_at, updated_at, state_json FROM sessions ORDER BY updated_at DESC"
+            ).fetchall()
         out = []
         for r in rows:
             active_domain = None
@@ -130,15 +187,23 @@ class SessionStore:
         return out
 
     def delete(self, session_id: str) -> None:
-        self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute("BEGIN IMMEDIATE")
+            try:
+                self._conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+                self._conn.execute("COMMIT")
+            except Exception:
+                self._conn.execute("ROLLBACK")
+                raise
 
 
 _store_singleton: SessionStore | None = None
+_store_lock = threading.Lock()
 
 
 def get_session_store() -> SessionStore:
     global _store_singleton
-    if _store_singleton is None:
-        _store_singleton = SessionStore()
-    return _store_singleton
+    with _store_lock:
+        if _store_singleton is None:
+            _store_singleton = SessionStore()
+        return _store_singleton

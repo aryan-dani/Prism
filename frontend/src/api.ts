@@ -27,6 +27,14 @@ export type Health = {
   gen_model: string
   title_model: string
   domains: string[]
+  ollama?: {
+    reachable: boolean
+    host: string
+    models_required: string[]
+    models_missing: string[]
+    ok: boolean
+    error?: string
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -61,7 +69,14 @@ export type SessionDetail = {
   id: string
   title: string | null
   active_domain: string | null
-  turns: Array<{ role: string; content: string; domain?: string | null }>
+  turns: Array<{
+    role: string
+    content: string
+    domain?: string | null
+    is_clarification?: boolean
+    no_answer?: boolean
+    confidence?: string | null
+  }>
   last_answer: Record<string, unknown> | null
   available_formats?: string[]
   pending_clarification: Record<string, unknown> | null
@@ -76,6 +91,80 @@ export function chat(sessionId: string, message: string) {
     method: 'POST',
     body: JSON.stringify({ message }),
   })
+}
+
+const STATUS_LABELS: Record<string, string> = {
+  received: 'Received…',
+  checking_guards: 'Checking policy guards…',
+  policy_lookup: 'Looking up policy rules…',
+  format_check: 'Checking format request…',
+  routing: 'Routing domain…',
+  retrieving: 'Retrieving knowledge…',
+  generating: 'Generating answer…',
+  titling: 'Updating title…',
+  done: 'Finishing…',
+}
+
+/** SSE chat: status stages then the same ChatResponse as /chat (no partial tokens). */
+export async function chatStream(
+  sessionId: string,
+  message: string,
+  onStatus?: (label: string, stage: string) => void,
+): Promise<ChatResponse> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/chat/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  })
+  if (!res.ok) {
+    throw new Error((await res.text()) || res.statusText)
+  }
+  if (!res.body) {
+    throw new Error('No response body from chat stream')
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let result: ChatResponse | null = null
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const parts = buffer.split('\n\n')
+    buffer = parts.pop() ?? ''
+    for (const block of parts) {
+      const lines = block.split('\n')
+      let event = 'message'
+      const dataLines: string[] = []
+      for (const line of lines) {
+        if (line.startsWith('event:')) event = line.slice(6).trim()
+        else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim())
+      }
+      if (!dataLines.length) continue
+      const raw = dataLines.join('\n')
+      let data: Record<string, unknown>
+      try {
+        data = JSON.parse(raw) as Record<string, unknown>
+      } catch {
+        continue
+      }
+      if (event === 'status') {
+        const stage = String(data.stage ?? '')
+        onStatus?.(STATUS_LABELS[stage] ?? `Working (${stage})…`, stage)
+      } else if (event === 'result') {
+        result = data as unknown as ChatResponse
+      } else if (event === 'error') {
+        throw new Error(String(data.message ?? 'Stream error'))
+      }
+    }
+  }
+
+  if (!result) {
+    throw new Error('Stream ended without a result')
+  }
+  return result
 }
 
 export async function renderFormat(sessionId: string, format: string) {
