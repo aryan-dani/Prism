@@ -35,6 +35,12 @@ export type Health = {
     ok: boolean
     error?: string
   }
+  uploads?: {
+    chunks_indexed: number
+    ttl_hours: number
+    max_bytes: number
+    allowed_suffixes: string[]
+  }
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -80,10 +86,54 @@ export type SessionDetail = {
   last_answer: Record<string, unknown> | null
   available_formats?: string[]
   pending_clarification: Record<string, unknown> | null
+  uploaded_docs?: UploadedDoc[]
 }
 
 export function getSession(id: string) {
   return request<SessionDetail>(`/api/sessions/${id}`)
+}
+
+/** Session-scoped uploaded document (ephemeral "uploaded" domain). */
+export type UploadedDoc = {
+  id: string
+  filename: string
+  content_type?: string
+  bytes_size?: number
+  chunk_count?: number
+  turn_index?: number
+  created_at?: string
+}
+
+export type UploadResponse = {
+  doc_id: string
+  filename: string
+  status: string
+  chunk_count: number
+  uploaded_docs: UploadedDoc[]
+}
+
+export async function uploadDocument(sessionId: string, file: File): Promise<UploadResponse> {
+  const body = new FormData()
+  body.append('file', file, file.name)
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/upload`, { method: 'POST', body })
+  if (!res.ok) {
+    let detail = ''
+    try {
+      const j = (await res.json()) as { detail?: string }
+      detail = j.detail ?? ''
+    } catch {
+      detail = await res.text()
+    }
+    throw new Error(detail || res.statusText)
+  }
+  return res.json() as Promise<UploadResponse>
+}
+
+export function deleteUpload(sessionId: string, docId: string) {
+  return request<{ ok: boolean; uploaded_docs: UploadedDoc[] }>(
+    `/api/sessions/${sessionId}/uploads/${docId}`,
+    { method: 'DELETE' },
+  )
 }
 
 export function chat(sessionId: string, message: string) {

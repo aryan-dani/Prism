@@ -75,7 +75,8 @@ These are documented here because they are part of the agent workflow even thoug
 | Ambiguity → clarification | If top-two domain scores within `ROUTER_AMBIGUITY_MARGIN` (0.04), ask a clarifying question instead of guessing | `prism/core/agent.py` |
 | No-answer honesty | If best dense distance exceeds relevance floor (stricter for Legal/Privacy), skip LLM and return grounded gap | `prism/core/retriever.py`, `answer.no_context_answer` |
 | Reformat request | Regex detect “as JSON / XML / excel / email” → render `last_answer` only | `prism/core/agent.py` |
-| Anaphora | Fold recent turn text into retrieval query when “that/it/the one…” appears | `prism/core/agent.py` |
+| Anaphora | Fold recent turn text into retrieval query when “that/it/the one…” appears; **plus one extra `top_k=3` “focus” retrieval on the raw follow-up** so a topic pivot (“…covered under warranty”, “…refund instead”) is not drowned by the previous topic, and a generation note to answer the follow-up rather than re-summarize | `prism/core/agent.py` |
+| Session document upload (ad-hoc 6th domain) | `POST /sessions/{id}/upload` → parse by extension (pypdf / python-docx / BeautifulSoup / text) → heading-aware chunk at 450 tokens → embed with the same `nomic-embed-text` → **separate** Chroma collection `prism_uploads` tagged `session_id`/`doc_id`. Retrieval is filtered by session; used when the user points at the file (“this document”, filename) **or** upload confidence passes a dense floor **and** a comparative check against the KBs (`UPLOAD_KB_MARGIN`). Deterministic `policy_math` is skipped when the user points at their file so Meridian numbers never override the user’s own document. Purged on session delete, on remove, and by a 24h TTL sweep at startup. No new prompt — the generation call gets an extra note: *“Answer ONLY from those uploaded chunks… if the uploaded text does not answer, set no_answer=true.”* | `prism/core/uploads.py`, `agent.py`, `api/routes.py` |
 | Jailbreak / prompt exfil | Deterministic refuse (no LLM) on “ignore previous instructions / print system prompt / developer mode” | `prism/core/text_utils.py`, `agent.py` |
 | Authority spoof / policy override | Deterministic refuse on CFO-spoof + “override threshold to ₹0” (same path every time — not model-dependent) | `prism/core/text_utils.py`, `agent.py` |
 | Leave / Finance arithmetic | **Code computes** CL carry-forward, leave-year join-date math, and Finance §2.1 approval bands from a stated claim amount | `prism/core/policy_math.py` |
@@ -133,7 +134,7 @@ Anchor phrases are literal English examples (e.g. HR: “leave policy”, “WFH
 
 ## 7. UI copy (non-model)
 
-Empty-state headline and suggestion chips in `web/src/App.tsx` are static product copy, not LLM-generated.
+Empty-state headline and suggestion chips in `frontend/src/App.tsx` are static product copy, not LLM-generated. The upload affordance (attach button, drag-and-drop, “active” document chips, “Local only · purged with this chat” note) is likewise static copy.
 
 ---
 

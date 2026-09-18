@@ -12,7 +12,7 @@ documented in docs/decisions.md.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -21,11 +21,21 @@ from queue import Empty, SimpleQueue
 from threading import Thread
 
 from prism.core.agent import handle_turn
-from prism.core.config import EMBED_MODEL, GEN_MODEL, OLLAMA_HOST, TITLE_MODEL, RuntimeInfo
-from prism.core.memory import get_session_store
+from prism.core.config import (
+    EMBED_MODEL,
+    GEN_MODEL,
+    OLLAMA_HOST,
+    TITLE_MODEL,
+    UPLOAD_ALLOWED_SUFFIXES,
+    UPLOAD_MAX_BYTES,
+    UPLOAD_TTL_HOURS,
+    RuntimeInfo,
+)
+from prism.core.memory import UploadedDocRef, get_session_store
 from prism.core.renderers import available_formats, render as render_format
 from prism.core.store import get_store
 from prism.core.titler import generate_title, maybe_retitle
+from prism.core.uploads import get_upload_store
 
 router = APIRouter()
 
@@ -54,6 +64,14 @@ class ChatResponse(BaseModel):
 
 class RenderRequest(BaseModel):
     format: str
+
+
+class UploadResponse(BaseModel):
+    doc_id: str
+    filename: str
+    status: str
+    chunk_count: int
+    uploaded_docs: list[dict]
 
 
 def _ollama_status() -> dict:
@@ -100,6 +118,10 @@ def health():
     status = "ok" if ollama.get("ok") and chunks > 0 else "degraded"
     if not ollama.get("reachable"):
         status = "degraded"
+    try:
+        upload_chunks = get_upload_store().count()
+    except Exception:
+        upload_chunks = 0
     return {
         "status": status,
         "chunks_indexed": chunks,
@@ -108,6 +130,12 @@ def health():
         "title_model": info.title_model,
         "domains": info.domains,
         "ollama": ollama,
+        "uploads": {
+            "chunks_indexed": upload_chunks,
+            "ttl_hours": UPLOAD_TTL_HOURS,
+            "max_bytes": UPLOAD_MAX_BYTES,
+            "allowed_suffixes": sorted(UPLOAD_ALLOWED_SUFFIXES),
+        },
     }
 
 
@@ -138,6 +166,7 @@ def get_session(session_id: str):
         "last_answer": state.last_answer.model_dump() if state.last_answer else None,
         "available_formats": available_formats(state.last_answer) if state.last_answer else ["prose"],
         "pending_clarification": state.pending_clarification.model_dump() if state.pending_clarification else None,
+        "uploaded_docs": [d.model_dump() for d in state.uploaded_docs],
     }
 
 
@@ -146,6 +175,82 @@ def delete_session(session_id: str):
     store = get_session_store()
     store.delete(session_id)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Session-scoped document uploads (ephemeral "uploaded" domain)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/sessions/{session_id}/upload", response_model=UploadResponse)
+async def upload_document(session_id: str, file: UploadFile = File(...)):
+    """Attach a file to this chat. Parsed, chunked, embedded locally and kept
+    in a session-filtered collection — never merged into the five KBs, purged
+    on session delete or after UPLOAD_TTL_HOURS."""
+    store = get_session_store()
+    state = store.load(session_id)
+    if state is None:
+        raise HTTPException(404, "session not found")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "empty file")
+    try:
+        doc = get_upload_store().ingest_bytes(
+            session_id=session_id,
+            filename=file.filename or "document",
+            data=data,
+            content_type=file.content_type or "",
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:  # parser / embedding failure
+        raise HTTPException(500, f"could not ingest file: {str(e)[:200]}")
+
+    # Re-load right before saving so a concurrent chat turn is not clobbered.
+    state = store.load(session_id) or state
+    state.uploaded_docs.append(
+        UploadedDocRef(
+            id=doc.id,
+            filename=doc.filename,
+            content_type=doc.content_type,
+            bytes_size=doc.bytes_size,
+            chunk_count=doc.chunk_count,
+            turn_index=len(state.turns),
+            created_at=doc.created_at,
+        )
+    )
+    store.save(state)
+    return UploadResponse(
+        doc_id=doc.id,
+        filename=doc.filename,
+        status="indexed",
+        chunk_count=doc.chunk_count,
+        uploaded_docs=[d.model_dump() for d in state.uploaded_docs],
+    )
+
+
+@router.get("/sessions/{session_id}/uploads")
+def list_uploads(session_id: str):
+    store = get_session_store()
+    state = store.load(session_id)
+    if state is None:
+        raise HTTPException(404, "session not found")
+    return {"uploaded_docs": [d.model_dump() for d in state.uploaded_docs]}
+
+
+@router.delete("/sessions/{session_id}/uploads/{doc_id}")
+def delete_upload(session_id: str, doc_id: str):
+    store = get_session_store()
+    state = store.load(session_id)
+    if state is None:
+        raise HTTPException(404, "session not found")
+    get_upload_store().delete_document(session_id, doc_id)
+    state.uploaded_docs = [d for d in state.uploaded_docs if d.id != doc_id]
+    if state.active_domain == "uploaded" and not state.uploaded_docs:
+        state.active_domain = None
+    store.save(state)
+    return {"ok": True, "uploaded_docs": [d.model_dump() for d in state.uploaded_docs]}
 
 
 @router.post("/sessions/{session_id}/chat", response_model=ChatResponse)

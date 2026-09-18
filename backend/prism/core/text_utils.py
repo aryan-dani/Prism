@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 DUP_WORD_RE = re.compile(r"\b([A-Za-z0-9]+)(\s+\1\b)+", re.IGNORECASE)
 MODEL_NUM_RE = re.compile(r"\bK-\d{3,6}[A-Z0-9-]*\b", re.IGNORECASE)
@@ -297,6 +298,39 @@ def detect_output_constraint(message: str) -> str | None:
 
 def prefers_email_draft(message: str) -> bool:
     return bool(re.search(r"\b(draft an email|write an email|email to my manager)\b", message, re.I))
+
+
+from pathlib import Path
+
+UPLOAD_POINTER_RE = re.compile(
+    r"\b("
+    r"this (document|file|pdf|docx|doc|attachment)|"
+    r"the (document|file|pdf|uploaded|attached)|"
+    r"uploaded (document|file|pdf)|"
+    r"attached (document|file|pdf)|"
+    r"according to (the|this) (document|file|pdf)|"
+    r"in (the|this) (document|file|pdf)|"
+    r"summarize (this|the) (document|file|pdf|attachment)|"
+    r"what does this (document|file|pdf) say"
+    r")\b",
+    re.I,
+)
+SUMMARIZE_UPLOAD_RE = re.compile(r"^\s*(summarize|summary|tldr|tl;dr|overview)\b", re.I)
+
+
+def query_points_at_uploads(query: str, filenames: list[str]) -> bool:
+    """True when the user is clearly asking about attached files, not the five KBs."""
+    q = (query or "").strip()
+    if not q:
+        return False
+    if UPLOAD_POINTER_RE.search(q) or SUMMARIZE_UPLOAD_RE.search(q):
+        return True
+    ql = q.lower()
+    for name in filenames:
+        stem = Path(name).stem.lower().strip()
+        if len(stem) >= 3 and stem in ql:
+            return True
+    return False
 
 
 VAGUE_NEW_SESSION_PATTERNS: list[tuple[re.Pattern[str], list[str]]] = [

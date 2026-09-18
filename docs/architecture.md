@@ -95,7 +95,8 @@ Gates run **in order**. Early returns skip the LLM when possible (safety + exact
 | 1 | Pure reformat of `last_answer` (JSON/XML/Excel/email) | `agent` + `renderers/` |
 | 2 | Resolve clarification; vague cold-start clarify | `agent` |
 | 2c | “What did I ask N questions ago?” from history | `agent` |
-| 3 | Anaphora expansion; long-range CL carry-forward email recall | `agent` |
+| 2d | **Uploaded-doc gate** — if the session has attachments and the user points at them (or upload retrieval is confident vs. the KBs), answer from the session-scoped `prism_uploads` collection | `agent` + `uploads` |
+| 3 | Anaphora expansion (+ one small “focus” retrieval on the raw follow-up); long-range CL carry-forward email recall | `agent` |
 | 4 | Route (embed + hit votes + anchors; sticky domain; ambiguity → ask) | `router` |
 | 5 | Hybrid retrieve (dense + BM25 → RRF); multi-domain merge when needed | `retriever` + `store` |
 | 6 | Relevance / fused confidence → else `no_context_answer` | `retriever` |
@@ -123,7 +124,7 @@ Documented also in `prompts.md` §4: jailbreak, CFO override, CL carry / leave-y
 
 | Path | Role |
 |---|---|
-| `prism/api/routes.py` | Health (incl. Ollama), sessions, chat, render, Excel |
+| `prism/api/routes.py` | Health (incl. Ollama + upload stats), sessions, chat, render, Excel, `upload` / `uploads` |
 | `prism/core/agent.py` | Turn state machine |
 | `prism/core/router.py` | Domain routing without an LLM |
 | `prism/core/retriever.py` | Hybrid retrieve + confidence |
@@ -131,7 +132,8 @@ Documented also in `prompts.md` §4: jailbreak, CFO override, CL carry / leave-y
 | `prism/core/answer.py` | `CanonicalAnswer` schema + generation |
 | `prism/core/answer_polish.py` | Post-validation / constraints |
 | `prism/core/policy_math.py` | Code-side leave arithmetic |
-| `prism/core/memory.py` | Session state + SQLite |
+| `prism/core/memory.py` | Session state + SQLite (incl. `uploaded_docs` refs) |
+| `prism/core/uploads.py` | Session-scoped upload store: parse → chunk → embed → `prism_uploads` collection; per-session BM25; TTL purge |
 | `prism/core/text_utils.py` | Heuristics (jailbreak, multi-domain, formats) |
 | `prism/core/renderers/*` | Prose / JSON / XML / Excel / email |
 | `prism/ingest/*` | Crawl, parse, chunk, index |
@@ -158,8 +160,11 @@ Companion: `eval/run_eval.py`, `eval/bench_models.py`, `prism.ingest.validate`.
 | `PRISM_EMBED_MODEL` | `nomic-embed-text` | Embeddings / routing |
 | `PRISM_TITLE_MODEL` | `qwen2.5:3b-instruct` | Session titles |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama |
+| `PRISM_UPLOAD_MAX_BYTES` | `12 MB` | Max upload size |
+| `PRISM_UPLOAD_TTL_HOURS` | `24` | Purge uploaded vectors/files older than this (checked at startup) |
+| `PRISM_UPLOAD_KB_MARGIN` | `0.06` | Implicit questions route to the upload only if within this dense-distance margin of the KB's best hit |
 
-Health: `GET /api/health` → `status`, `chunks_indexed`, configured models, and `ollama.{reachable,models_missing,ok}`.
+Health: `GET /api/health` → `status`, `chunks_indexed`, configured models, `ollama.{reachable,models_missing,ok}`, and `uploads.{chunks_indexed,ttl_hours,max_bytes,allowed_suffixes}`.
 
 ---
 
@@ -188,6 +193,11 @@ Ordered by impact × effort given **current** code (not generic RAG advice).
 11. **Ollama keep-alive** — `PRISM_OLLAMA_KEEP_ALIVE` (default `25m`) + startup warm  
 12. **Citation ⊆ retrieved URLs** — polish drops sources not in retrieved chunks  
 13. **Multi-user session store** — SQLite WAL + RLock + busy timeout around session CRUD  
+
+### Final sprint — shipped
+
+14. **Session-scoped document upload (ad-hoc 6th domain)** — `POST …/upload`; PDF / DOCX / TXT / MD / CSV / JSON / HTML; separate `prism_uploads` collection filtered by `session_id`; dense + comparative-vs-KB confidence gate; purged on delete / remove / 24h TTL. Frontend: attach button, drag-and-drop, active-doc chips. See `decisions.md` §10.  
+15. **Anaphora focus retrieval** — extra `top_k=3` pass on the raw follow-up so topic pivots (“covered under warranty?”, “refund instead?”) surface the right chunks. See `decisions.md` §11.  
 
 Track progress against this list in PRs; update this section when an item ships.
 

@@ -17,7 +17,8 @@ Built for the Kohler-MITWPU AI Research Lab case study challenge (individual sub
 | **Clarification-seeking** | Asks a short question when domain routing is ambiguous — doesn’t guess |
 | **Honest no-answer** | Refuses to fabricate when retrieval isn’t confident (stricter for Legal/Privacy) |
 | **Dynamic output formats** | One canonical answer object → prose / JSON / XML / Excel / email without re-retrieval |
-| **Local-first** | Ollama + embedded Chroma; no cloud LLM, no separate vector DB server |
+| **Bring your own document** | Drop a PDF / DOCX / TXT / CSV into the chat → indexed locally as a session-scoped sixth domain, answerable immediately alongside the five KBs; purged when the chat is deleted (24h TTL) |
+| **Local-first** | Ollama + embedded Chroma; no cloud LLM, no separate vector DB server — uploaded documents never leave the machine |
 
 **Architecture map:** [`docs/architecture.md`](docs/architecture.md) — system diagram, five knowledge bases (sources + ingest), turn pipeline, module index, improvement roadmap.  
 **Decision log:** [`docs/decisions.md`](docs/decisions.md) · **Prompts / workflows:** [`docs/prompts.md`](docs/prompts.md)

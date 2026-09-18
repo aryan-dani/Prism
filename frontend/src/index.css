@@ -457,7 +457,7 @@ button {
 
 .composer {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 0.65rem;
   align-items: end;
   padding: 0.7rem 0.75rem;
@@ -465,6 +465,109 @@ button {
   border-radius: 20px;
   background: rgba(250, 247, 241, 0.95);
   box-shadow: var(--shadow);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.composer-shell.drag-over .composer {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow);
+}
+
+.attach {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0.15rem;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1.25rem;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.attach:not(:disabled):hover {
+  border-color: var(--accent);
+  border-style: solid;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.attach:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Attached-document chips (ephemeral "uploaded" domain) */
+.upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.upload-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.28rem 0.4rem 0.28rem 0.6rem;
+  border: 1px solid #c9b58f;
+  border-radius: 999px;
+  background: #f7efdc;
+  color: #5b4a22;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.upload-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--accent-hot);
+}
+
+.upload-name {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-state {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.upload-remove {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #5b4a22;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.upload-remove:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.upload-note {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.chip.upload-domain {
+  background: #f7efdc;
+  border-color: #c9b58f;
+  color: #5b4a22;
 }
 
 .composer textarea {

@@ -16,6 +16,7 @@ venv/
 # Data (raw crawl cache + built Chroma index are reproducible; sessions are local)
 backend/data/raw/
 backend/data/chroma/
+backend/data/uploads/
 backend/data/sessions.db
 backend/data/sessions.db-*
 *.log
