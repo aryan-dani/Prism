@@ -29,13 +29,13 @@ class SessionLog:
 
 
 class PrismClient:
-    # Server now bounds a single Ollama call at ~75s (config.OLLAMA_REQUEST_TIMEOUT_S)
+    # Server now bounds a single Ollama call at ~150s (config.OLLAMA_REQUEST_TIMEOUT_S)
     # and generate_answer retries once on invalid JSON, so a legitimately slow-but-
-    # correct turn under GPU contention can take ~150s+retrieval before the server
+    # correct turn under GPU contention can take ~300s+retrieval before the server
     # itself gives up and returns an honest no-answer. Give it room to finish and
     # report real content instead of the test client aborting first and recording
     # a hard FAIL for what would otherwise be a (possibly PARTIAL-on-latency) PASS.
-    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 240.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:8000", timeout: float = 360.0):
         self.base_url = base_url.rstrip("/")
         self.client = httpx.Client(base_url=self.base_url, timeout=timeout)
 

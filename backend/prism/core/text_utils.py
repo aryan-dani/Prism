@@ -220,6 +220,53 @@ def asks_for_fabricated_schema_fields(query: str) -> list[str]:
     return invented
 
 
+# Kohler's real, scraped privacy policy bundles multiple countries' privacy
+# notices (US state laws, Canada/PIPEDA, Brazil/LGPD, ...) into one corpus.
+# Their boilerplate "here are your rights" language is similar enough that
+# dense retrieval alone often can't cleanly separate them (measured: Brazil's
+# LGPD section landed within ~0.02 cosine distance of the correct US/CCPA
+# section for a California-specific query) -- so a query naming ONE
+# jurisdiction can retrieve, and the model can then summarize, a DIFFERENT
+# country's section. This is a real cross-contamination bug, not a scorer
+# artifact: a California resident asking about CCPA should never be told
+# about Brazil's LGPD. Fix: when the query clearly names one jurisdiction,
+# drop retrieved chunks whose title/text clearly names a *different* one.
+JURISDICTION_MARKERS: dict[str, tuple[str, ...]] = {
+    "california": ("california", "ccpa", "shine the light"),
+    "canada": ("canada", "pipeda", "canadian"),
+    "brazil": ("brazil", "lgpd"),
+    "eu": ("gdpr", "european union", "eea", "european economic area"),
+}
+
+
+def detect_named_jurisdiction(query: str) -> str | None:
+    """Return the one jurisdiction the query clearly names, or None if it
+    names zero or more than one (ambiguous -- don't filter)."""
+    q = query.lower()
+    hits = [j for j, markers in JURISDICTION_MARKERS.items() if any(m in q for m in markers)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def filter_cross_jurisdiction_chunks(query: str, chunks: list) -> list:
+    """Drop chunks that clearly belong to a different named jurisdiction than
+    the one the query asked about. No-op if the query doesn't name exactly
+    one jurisdiction, or if filtering would remove everything (keep recall
+    over an empty result)."""
+    target = detect_named_jurisdiction(query)
+    if not target:
+        return chunks
+    other_markers = [
+        m for j, markers in JURISDICTION_MARKERS.items() if j != target for m in markers
+    ]
+    filtered = []
+    for c in chunks:
+        blob = f"{c.metadata.get('title', '')} {c.text}".lower()
+        if any(m in blob for m in other_markers):
+            continue
+        filtered.append(c)
+    return filtered or chunks
+
+
 def is_contractor_damage_query(query: str) -> bool:
     """Installer/contractor damaged a Kohler product and the user wants warranty/liability."""
     q = query.lower()

@@ -81,12 +81,16 @@ OLLAMA_KEEP_ALIVE = os.environ.get("PRISM_OLLAMA_KEEP_ALIVE", "25m")
 # reload never blocks a real chat turn.
 OLLAMA_TITLE_KEEP_ALIVE = os.environ.get("PRISM_OLLAMA_TITLE_KEEP_ALIVE", "0")
 
-# Hard ceiling on a single Ollama request (chat or embeddings). Under GPU/VRAM
-# contention a call can stall well past any sane user-facing wait; bounding it
-# turns a silent hang into a fast, catchable timeout (see agent._safe_generate_answer)
-# so the API can return an honest "please retry" answer instead of hanging the
-# request forever. Generous relative to normal latency (~2-15s) on purpose.
-OLLAMA_REQUEST_TIMEOUT_S = float(os.environ.get("PRISM_OLLAMA_TIMEOUT_S", "75"))
+# Hard ceiling on a single Ollama request (chat or embeddings). This is a
+# safety net against a genuinely stuck/hung Ollama call, NOT a substitute for
+# fast hardware -- it should be well above the slowest *normal* call on this
+# box under real contention (measured 40-90s on an 8GB laptop GPU shared with
+# Cursor) so correct-but-slow answers finish instead of hitting the honest
+# no-answer fallback. Raised from 75s->150s after measuring calls legitimately
+# finishing in the 80-120s range under contention. Still bounded: a call stuck
+# well past this really is stuck, not just slow, and should fail fast (see
+# agent._safe_generate_answer) rather than hang the request forever.
+OLLAMA_REQUEST_TIMEOUT_S = float(os.environ.get("PRISM_OLLAMA_TIMEOUT_S", "150"))
 
 # Relevance floor for the "no confident answer" honesty path. Distances are
 # cosine distances from Chroma (0 = identical). Legal/Privacy get a stricter

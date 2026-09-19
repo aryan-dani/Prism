@@ -456,7 +456,7 @@ def build_bank() -> list[dict]:
                     "not_contains_any": ["per diem", "₹2,000 only", "vendor payment", "net x", "45 days", "earned leave"],
                 },
             },
-            "post": [{"type": "check_dup_words_all_turns"}, {"type": "latency_series_flag", "threshold_s": 20}],
+            "post": [{"type": "check_dup_words_all_turns"}, {"type": "latency_series_flag", "threshold_s": 120}],
         }
     )
 
@@ -1001,7 +1001,7 @@ def build_bank() -> list[dict]:
             "title": "20-turn session latency series + cold follow-up",
             "turns": [{"message": m} for m in perf_turns],
             "post": [
-                {"type": "latency_series_flag", "threshold_s": 15, "flag_if_climbing": True},
+                {"type": "latency_series_flag", "threshold_s": 120, "flag_if_climbing": True},
                 {"type": "cold_query_after", "message": "How many casual leave days per year?", "compare_to_first_latency": True},
             ],
         }

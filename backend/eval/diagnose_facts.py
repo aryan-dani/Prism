@@ -31,6 +31,7 @@ from collections import Counter, defaultdict
 from prism.core.answer import generate_answer, no_context_answer
 from prism.core.config import EVAL_DIR
 from prism.core.retriever import retrieve
+from prism.core.text_utils import filter_cross_jurisdiction_chunks
 
 GOLDEN_PATH = EVAL_DIR / "golden.jsonl"
 RESULTS_DIR = EVAL_DIR / "results"
@@ -133,6 +134,7 @@ def main() -> None:
         print(f"  [{i}/{len(records)}] {q['id']} ({domain})", flush=True)
 
         result = retrieve(query, domain=domain)
+        result.chunks = filter_cross_jurisdiction_chunks(query, result.chunks)
         context = "\n".join(c.text for c in result.chunks)
 
         if not result.chunks or not result.is_confident:

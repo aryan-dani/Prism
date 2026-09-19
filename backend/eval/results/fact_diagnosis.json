@@ -1,0 +1,862 @@
+[
+  {
+    "id": "hr_01",
+    "domain": "hr",
+    "query": "How many casual leave days do I get per year and how many can I carry forward?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.20977258682250977,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "12 days per leave year",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      },
+      {
+        "fact": "5 unused CL days may be carried into the next leave year",
+        "bench": "PHRASING",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      }
+    ],
+    "bench_answer": "You are entitled to 12 casual leave days per year, credited monthly in advance at 1 day per completed month. Up to 5 unused casual leave days may be carried into the next leave year, with any balance above 5 lapsing on March 31. Casual Leave Entitlement 12 days per leave year Casual Leave Carry-Forward 5 days per leave year",
+    "agent_answer": "You get 12 casual leave days per year, credited monthly in advance at 1 day per completed month. Up to 5 unused casual leave days can be carried forward into the next leave year. Casual Leave Entitlement 12 days per year Casual Leave Carry-Forward 5 days per leave year"
+  },
+  {
+    "id": "hr_02",
+    "domain": "hr",
+    "query": "What is the notice period for a confirmed manager who wants to resign?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.23593765497207642,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "60 days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "Grade M1 and above",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "The notice period for a confirmed manager (Grade M1 and above) is 60 days. Notice Period for Confirmed Manager 60 days ",
+    "agent_answer": "The notice period for a confirmed manager (Grade M1 and above) is 60 days. Notice Period for Confirmed Manager 60 days "
+  },
+  {
+    "id": "hr_03",
+    "domain": "hr",
+    "query": "How long is the probation period for a new hire?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.1502392292022705,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "6 months",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "extended once, by up to 3 months",
+        "bench": "PHRASING",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      }
+    ],
+    "bench_answer": "The probation period for new hires (Grades E1 and above) is 6 months, which can be extended by up to 3 months at the discretion of the Reporting Manager and HR Business Partner. Probation Period for Grades E1 and above 6 months  Probation Extension up to 3 months ",
+    "agent_answer": "The probation period for new hires (Grades E1 and above) is 6 months, which can be extended by up to 3 months at the discretion of the Reporting Manager and HR Business Partner. Probation Period 6 months  Probation Extension up to 3 months "
+  },
+  {
+    "id": "hr_04",
+    "domain": "hr",
+    "query": "How many days of maternity leave are employees entitled to?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.23692405223846436,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "26 weeks",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "12 weeks for the third child onward",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "Employees are entitled to 26 weeks of paid leave for the first two children and 12 weeks for the third child onward. Maternity Leave for First Two Children 26 weeks  Maternity Leave for Third Child Onward 12 weeks ",
+    "agent_answer": "Employees are entitled to 26 weeks of paid leave for the first two children and 12 weeks for the third child onward. Maternity Leave for First Two Children 26 weeks  Maternity Leave for Third Child and Beyond 12 weeks "
+  },
+  {
+    "id": "hr_05",
+    "domain": "hr",
+    "query": "What happens after three instances of minor misconduct within 12 months?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.2630314826965332,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "Final Written Warning",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "Performance Improvement Plan",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "30–60 days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "After three instances of minor misconduct within a 12-month window, the employee will receive a Final Written Warning and a Performance Improvement Plan (PIP) for 30–60 days. If the PIP is not successfully completed, or a fourth instance occurs, termination of employment may follow. Number of minor misconduct instances 3  Outcome after third instance Final Written Warning + Performance Improvement Plan (PIP) for 30–60 days  Outcome if PIP not completed or fourth instance occurs Termination of Employment ",
+    "agent_answer": "After three instances of minor misconduct within a 12-month window, the employee will receive a Final Written Warning and a Performance Improvement Plan (PIP) for 30–60 days. If the PIP is not successfully completed, or a fourth instance occurs, termination of employment may follow. Number of minor misconduct instances 3  Disciplinary action Final Written Warning + Performance Improvement Plan (PIP) for 30–60 days  Termination condition If PIP is not successfully completed, or a fourth instance occurs "
+  },
+  {
+    "id": "hr_06",
+    "domain": "hr",
+    "query": "How many days of earned leave can I encash when I leave the company?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.2267066240310669,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "up to 30 EL days",
+        "bench": "PHRASING",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      },
+      {
+        "fact": "at the time of separation",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      }
+    ],
+    "bench_answer": "You can encash up to 30 days of earned leave at the time of separation. Maximum Encashment at Separation 30 days",
+    "agent_answer": "You can encash up to 30 days of earned leave when you separate from the company. Maximum encashment at separation 30 days"
+  },
+  {
+    "id": "hr_07",
+    "domain": "hr",
+    "query": "How many days can I work from home per week?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.2497868537902832,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "up to 2 days per week",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "Grade E2 and above",
+        "bench": "PHRASING",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      }
+    ],
+    "bench_answer": "You can work from home up to 2 days per week, subject to Reporting Manager approval and team coverage needs. Maximum WFH days per week 2 days",
+    "agent_answer": "You can work from home up to 2 days per week, subject to Reporting Manager approval and team coverage needs. Maximum WFH days per week 2 days"
+  },
+  {
+    "id": "hr_08",
+    "domain": "hr",
+    "query": "What is the escalation process if I have a grievance against my manager?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.20732402801513672,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "Reporting Manager",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "5 working days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "HR Business Partner",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "7 working days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "Grievance Redressal Committee",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "15 working days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "If you have a grievance against your manager, you should follow the three-step escalation process: first, report it to your Reporting Manager; if unresolved, escalate to the HR Business Partner; and if still unresolved, the matter will be referred to the Grievance Redressal Committee. Step 1 Reporting Manager  Step 2 HR Business Partner  Step 3 Grievance Redressal Committee  Report the grievance to your Reporting Manager within 5 working days If unresolved, escalate to the HR Business Partner within 7 working days If still unresolved, refer the matter to the Grievance Redressal Committee withi",
+    "agent_answer": "The escalation process involves three steps: first, reporting to your Reporting Manager, then to the HR Business Partner, and finally to the Grievance Redressal Committee. Step 1 - Reporting Manager Raise the grievance verbally or in writing within 5 working days Step 2 - HR Business Partner If unresolved or concerns the Reporting Manager directly, escalate to HRBP investigate and respond within 7 working days Step 3 - Grievance Redressal Committee If still unresolved, refer to GRC issue a final decision within 15 working days of referral Raise the grievance verbally or in writing to your Repo"
+  },
+  {
+    "id": "hr_09",
+    "domain": "hr",
+    "query": "How many sick leave days do I get and is a medical certificate required?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.26298224925994873,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "10 days per leave year",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "2 consecutive days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "You are entitled to 10 sick leave days per leave year. A medical certificate is required for any sick leave request exceeding 2 consecutive days. Sick Leave Entitlement 10 days per leave year Medical Certificate Requirement Mandatory for requests exceeding 2 consecutive days ",
+    "agent_answer": "You are entitled to 10 sick leave days per leave year, and a medical certificate is required for any sick leave request exceeding 2 consecutive days. Sick Leave Entitlement 10 days per leave year Medical Certificate Requirement Mandatory for requests exceeding 2 consecutive days "
+  },
+  {
+    "id": "hr_10",
+    "domain": "hr",
+    "query": "How soon after the last working day is the full and final settlement processed?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.3077892065048218,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "45 days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "The full-and-final settlement, including encashment of unused leave, is processed within 45 days of the Last Working Day (LWD). Processing Time 45 days ",
+    "agent_answer": "The full-and-final settlement, including encashment of unused leave, is processed within 45 days of the Last Working Day (LWD). Full-and-final settlement processing time 45 days "
+  },
+  {
+    "id": "fin_01",
+    "domain": "finance",
+    "query": "An employee submits an expense claim for ₹15,000. Who needs to approve it?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.250116229057312,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "Reporting Manager sign-off required",
+        "bench": "PHRASING",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      },
+      {
+        "fact": "₹5,001 – ₹25,000",
+        "bench": "GEN_MISS",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      }
+    ],
+    "bench_answer": "The Reporting Manager needs to approve the expense claim for ₹15,000. Claim Value ₹15,000  Required Approval Reporting Manager ",
+    "agent_answer": "A claim of ₹15,000 falls in the ₹5,001 to ₹25,000 band and requires Reporting Manager sign-off. Claim amount ₹15,000  Approval band ₹5,001 to ₹25,000  Required approval Reporting Manager sign-off "
+  },
+  {
+    "id": "fin_02",
+    "domain": "finance",
+    "query": "Above what amount does an expense claim need CFO approval?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.25781548023223877,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "Above ₹1,00,000",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "An expense claim above ₹1,00,000 requires CFO approval. Claim Value ₹1,00,001  Claim Value Required Approval Up to ₹5,000 Self-certified by claimant; no additional Finance sign-off required ₹5,001 – ₹25,000 Reporting Manager sign-off required ₹25,001 – ₹1,00,000 Department Head sign-off required (in addition to Reporting Manager) Above ₹1,00,000 Chief Financial Officer (CFO) sign-off required (in addition to Department Head)",
+    "agent_answer": "Expense claims above ₹1,00,000 require CFO approval. Approval threshold ₹1,00,000 ₹ Claim Value Required Approval Up to ₹5,000 Self-certified by claimant; no additional Finance sign-off required ₹5,001 – ₹25,000 Reporting Manager sign-off required ₹25,001 – ₹1,00,000 Department Head sign-off required (in addition to Reporting Manager) Above ₹1,00,000 Chief Financial Officer (CFO) sign-off required (in addition to Department Head)"
+  },
+  {
+    "id": "fin_03",
+    "domain": "finance",
+    "query": "What is the per diem rate for a business trip to Mumbai?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.193057119846344,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "Tier-1",
+        "bench": "GEN_MISS",
+        "in_context_loose": true,
+        "agent": "GEN_MISS"
+      },
+      {
+        "fact": "₹2,000 per day",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "The per diem rate for a business trip to Mumbai is ₹2,000 per day. Per Diem Rate for Mumbai ₹2,000 per day",
+    "agent_answer": "The per diem rate for a business trip to Mumbai is ₹2,000 per day. Per Diem Rate for Mumbai ₹2,000 per day"
+  },
+  {
+    "id": "fin_04",
+    "domain": "finance",
+    "query": "When is a Purchase Order mandatory before ordering goods or services?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.2051066756248474,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "above ₹50,000",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "A Purchase Order is mandatory for any procurement above ₹50,000 before goods/services are ordered. Minimum Purchase Order Value ₹50,000 ",
+    "agent_answer": "A Purchase Order is mandatory for any procurement above ₹50,000 before goods/services are ordered. Minimum Purchase Order Value ₹50,000 ₹"
+  },
+  {
+    "id": "fin_05",
+    "domain": "finance",
+    "query": "What is the standard vendor payment term?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.2614262104034424,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "Net 45",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "The standard payment term is Net 45 from the invoice approval date, unless a different term is specified in the vendor's master agreement. Standard Payment Term Net 45 days",
+    "agent_answer": "The standard payment term is Net 45 from the invoice approval date, unless a different term is specified in the vendor's master agreement. Standard Payment Term Net 45 days"
+  },
+  {
+    "id": "fin_06",
+    "domain": "finance",
+    "query": "What is the maximum unreceipted expense claim allowed per month?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.26639068126678467,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "₹1,500 in unreceipted claims per month",
+        "bench": "PHRASING",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      }
+    ],
+    "bench_answer": "The maximum unreceipted expense claim allowed per month is ₹1,500. Unreceipted Claim Limit ₹1,500 ₹",
+    "agent_answer": "The maximum unreceipted expense claim allowed per month is ₹1,500. Unreceipted Claim Limit ₹1,500 ₹"
+  },
+  {
+    "id": "fin_07",
+    "domain": "finance",
+    "query": "What is the overtime pay rate for weekday overtime?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.19586241245269775,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "1.5x hourly base rate",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "The overtime pay rate for weekday overtime is 1.5x the hourly base rate. Overtime Rate 1.5x hourly base rate ",
+    "agent_answer": "The overtime pay rate for weekday overtime is 1.5x the hourly base rate. Overtime Rate 1.5x hourly base rate "
+  },
+  {
+    "id": "fin_08",
+    "domain": "finance",
+    "query": "Above what amount does a capital expenditure purchase require CFO approval?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.22794795036315918,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "above ₹5,00,000",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "A capital expenditure purchase above ₹5,00,000 requires a CapEx justification form and CFO approval. CapEx threshold ₹5,00,000 ₹",
+    "agent_answer": "Any single capital expenditure (CapEx) purchase above ₹5,00,000 requires a CapEx justification form and CFO approval, regardless of whether it was pre-approved in the annual budget. CapEx CFO threshold ₹5,00,000  Applies regardless of budget "
+  },
+  {
+    "id": "fin_09",
+    "domain": "finance",
+    "query": "What variance percentage against quarterly budget triggers a required explanation to Finance?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.22194981575012207,
+    "bench_no_answer": false,
+    "agent_domain": "finance",
+    "facts": [
+      {
+        "fact": "10% variance",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      },
+      {
+        "fact": "10 working days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PASS"
+      }
+    ],
+    "bench_answer": "Departments exceeding 10% variance against quarterly budget (either over or under) must submit a variance explanation to Finance within 10 working days of quarter-close. Variance threshold 10% ",
+    "agent_answer": "Departments exceeding 10% variance against quarterly budget (either over or under) must submit a variance explanation to Finance within 10 working days of quarter-close. Variance threshold for explanation 10% "
+  },
+  {
+    "id": "fin_10",
+    "domain": "finance",
+    "query": "How much is the employee referral bonus and when is it paid?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.39372700452804565,
+    "bench_no_answer": false,
+    "agent_domain": "hr",
+    "facts": [
+      {
+        "fact": "₹25,000",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "GEN_MISS"
+      },
+      {
+        "fact": "after 90 days",
+        "bench": "PASS",
+        "in_context_loose": true,
+        "agent": "PHRASING"
+      }
+    ],
+    "bench_answer": "The employee referral bonus is ₹25,000 and it is paid after 90 days, as per the HR Policy Section 11. Employee referral bonus amount 25,000 ₹ Payment timeline After 90 days ",
+    "agent_answer": "The employee referral bonus is paid after the referred candidate completes 90 days of continuous employment, but the specific amount is not detailed in the provided context. Bonus Timing 90 days of continuous employment "
+  },
+  {
+    "id": "cs_01",
+    "domain": "customer_support",
+    "query": "My toilet is occasionally leaking or running, what should I check?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.17625701427459717,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "trip lever chain",
+        "bench": "PASS",
+        "in_context_loose": true
+      },
+      {
+        "fact": "flush valve flapper",
+        "bench": "PHRASING",
+        "in_context_loose": true
+      },
+      {
+        "fact": "canister seal",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Check the trip lever chain for proper slack, adjust the tank water level, and replace the worn or dirty flapper or canister seal. Trip lever chain adjustment Adjust the chain to have roughly one to two links of slack.  Tank water level adjustment Adjust the tank water level to prevent overflow into the flush valve overflow.  Flapper or canister seal replacement Replace the worn or dirty flapper or canister seal.  Adjust the trip lever chain for proper slack. Adjust tank water level to prevent water from overfilling and running into the flush valve overflow. Replace worn or dirty flapper or can"
+  },
+  {
+    "id": "cs_02",
+    "domain": "customer_support",
+    "query": "How do I remove an aerator from my faucet?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.12446105480194092,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "aerator",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "To remove the aerator, use an adjustable wrench to turn it counterclockwise. For some models, you can locate the aerator by sliding a fingernail over the end of the spout and unthreading it by hand. Tool Needed Adjustable wrench  Alternative Method Slide a fingernail over the end of the spout and unthread the aerator by hand  Line up an adjustable wrench with the flats on the spray face Turn the wrench counterclockwise For some models, slide a fingernail over the end of the spout to locate the aerator Unthread the aerator by hand"
+  },
+  {
+    "id": "cs_03",
+    "domain": "customer_support",
+    "query": "What is Kohler's return policy?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.16883301734924316,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "return",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Kohler's return policy allows returns within 90 days of shipment, provided the products are in new and saleable condition and approved for return by Kohler. Customers are responsible for return shipping costs and must ship the product back to the approved Kohler.com warehouse. Return period 90 days  Condition of product new and saleable  Return authorization required  Shipping costs customer responsibility  Shipping location approved Kohler.com warehouse "
+  },
+  {
+    "id": "cs_04",
+    "domain": "customer_support",
+    "query": "How do I register my new Kohler product?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.13123124837875366,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "registration",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Users should follow the specific safety and handling instructions provided in the Material Safety Data Sheets (MSDS) for each product, including wearing appropriate personal protective equipment and ensuring proper ventilation. Safety Instructions Wear appropriate personal protective equipment and ensure proper ventilation.  Handling Instructions Follow the specific instructions provided in the MSDS for each product.  Review the specific safety and handling instructions provided in the MSDS for each product. Wear appropriate personal protective equipment as directed. Ensure proper ventilation "
+  },
+  {
+    "id": "cs_05",
+    "domain": "customer_support",
+    "query": "What warranty do Kohler faucets come with?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.22755277156829834,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "Lifetime Limited Warranty",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Kohler faucets come with a Lifetime Limited Warranty. Warranty Type Lifetime Limited "
+  },
+  {
+    "id": "cs_06",
+    "domain": "customer_support",
+    "query": "My shower door isn't sliding smoothly, how do I fix it?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.2632368803024292,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "roller",
+        "bench": "PASS",
+        "in_context_loose": true
+      },
+      {
+        "fact": "track",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "To fix a shower door that isn't sliding smoothly, first check for debris in the roller channels. If the rollers are correctly installed and debris is not an issue, you may need to adjust the rollers for out-of-plumb conditions. Check for Debris Remove any debris from the roller channels inside the top track of the shower door.  Adjust Rollers If debris is not the issue, adjust the rollers for out-of-plumb conditions by rotating the cam.  Check to make sure there is no debris in the roller channels inside the top track of the shower door. If the rollers are installed correctly and the panels st"
+  },
+  {
+    "id": "cs_07",
+    "domain": "customer_support",
+    "query": "How do I check my order status?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.19112664461135864,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "order status",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "You can check your order status by visiting the [Track Your Order](https://www.kohler.com/en/support) page on [www.kohler.com](https://www.kohler.com/en). Order tracking page Track Your Order  Order tracking URL https://www.kohler.com/en/support "
+  },
+  {
+    "id": "cs_08",
+    "domain": "customer_support",
+    "query": "What could cause a leak from the end of a faucet spout?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.13889318704605103,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "spout",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "A leak from the end of a faucet spout could be caused by a loose setscrew, a damaged O-ring, or a misaligned spout. For slip-fit spouts, the setscrew should not be loosened, but for threaded spouts, ensure the setscrew is tight. Setscrew Ensure the setscrew is tight.  O-ring Check for damage to the O-ring.  Spout Alignment Ensure the spout is properly aligned. "
+  },
+  {
+    "id": "priv_01",
+    "domain": "privacy",
+    "query": "What personal information does Kohler collect from me?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.20104926824569702,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "personal information",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Kohler provides various rights to individuals regarding their personal information, including the right to know, access, correct, limit, delete, and withdraw consent for processing. Individuals can also opt-out of targeted advertising and request the transfer of their personal information. Rights provided to individuals Right to know, access, correct, limit, delete, and withdraw consent for processing. Opt-out of targeted advertising and request transfer of personal information.  Contact method KohlerGlobalDataPrivacy@kohler.com or 1-800-923-1138  Opt-out method Email, phone, or global privacy"
+  },
+  {
+    "id": "priv_02",
+    "domain": "privacy",
+    "query": "How do I opt out of having my personal information sold or shared?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.23769909143447876,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "Do Not Sell",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      },
+      {
+        "fact": "Share",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Kohler provides several data subject rights, including the right to access, correct, delete, and transfer personal information, as well as the right to object to processing and withdraw consent. Data Subject Rights Access, correct, delete, transfer, restrict, object, withdraw consent  Contact for Requests KohlerGlobalDataPrivacy@kohler.com or https://privacy.kohler.com/  Jurisdiction EEA, UK  Contact KohlerGlobalDataPrivacy@kohler.com or use the online form at https://privacy.kohler.com/ Provide specific information to confirm your identity Submit your request for the specific data subject rig"
+  },
+  {
+    "id": "priv_03",
+    "domain": "privacy",
+    "query": "Does Kohler's privacy policy describe how long they retain my data?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.1670454740524292,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "retention",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Kohler's privacy policy states that they will store your personal data for as long as necessary to fulfill the purpose for which it was collected, including compliance with applicable laws, regulations, and court orders. Upon termination of processing activities, Kohler will securely delete the data if there is no legal basis to justify its storage. Data retention period as long as necessary to fulfill the purpose for which it was collected, including compliance with applicable laws, regulations, and court orders "
+  },
+  {
+    "id": "priv_04",
+    "domain": "privacy",
+    "query": "What rights do California residents have regarding their personal data under CCPA?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.3112518787384033,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "CCPA",
+        "bench": "RETRIEVAL_MISS",
+        "in_context_loose": false
+      },
+      {
+        "fact": "California",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Individuals in Brazil have several rights regarding their personal information, including the right to know what personal information is handled, how it is handled, and the right to access, correct, or delete their personal information. Right to know Individuals can request information about what personal information is handled and how it is handled.  Right to access Individuals can request access to their personal information.  Right to correction Individuals can request corrections or supplements to their personal information.  Right to deletion Individuals can request the deletion of their "
+  },
+  {
+    "id": "priv_05",
+    "domain": "privacy",
+    "query": "Can I request access to the personal data Kohler holds about me?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.19139814376831055,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "access",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Yes, you can request access to the personal data Kohler holds about you. You can do this by contacting KohlerGlobalDataPrivacy@kohler.com or through the online portal at https://privacy.kohler.com/policies/en/. Contact Method KohlerGlobalDataPrivacy@kohler.com or https://privacy.kohler.com/policies/en/  Contact KohlerGlobalDataPrivacy@kohler.com or use the online portal at https://privacy.kohler.com/policies/en/ Provide necessary information to confirm your identity Follow the instructions to request access to your personal data"
+  },
+  {
+    "id": "legal_01",
+    "domain": "legal",
+    "query": "Are Kohler products compliant with California Proposition 65?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.18101274967193604,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "Proposition 65",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "The text lists several MSDS documents for various products including Vikrell Repair Kit, Waterless Urinal Cleaner, Waterless Urinal Sealing Liquid, Purefresh Scent Packs, and Kohler Cleaners. Product Vikrell Repair Kit  Product Waterless Urinal Cleaner  Product Waterless Urinal Sealing Liquid  Product Purefresh Scent Packs  Product Kohler Cleaners "
+  },
+  {
+    "id": "legal_02",
+    "domain": "legal",
+    "query": "Does Kohler provide Safety Data Sheets for its products?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.17426550388336182,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "Safety Data Sheet",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      },
+      {
+        "fact": "SDS",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Proposition 65 is a California law that requires businesses to inform Californians about exposures to specific chemicals known to cause cancer or reproductive toxicity. Kohler Kitchen and Bath products are evaluated for compliance with this law, and necessary warnings are provided where required. What is Proposition 65? A California law that requires businesses to inform Californians about exposures to specific chemicals known to cause cancer or reproductive toxicity.  How does it apply to Kohler Kitchen and Bath products? Kohler Kitchen and Bath products are evaluated for compliance with this"
+  },
+  {
+    "id": "legal_03",
+    "domain": "legal",
+    "query": "What are Kohler's terms and conditions for using kohler.com?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.1627306342124939,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "terms",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Kohler offers Product Transparency Documents for green building certifications, which can be found at https://www.us.kohler.com/us/EPD/article/CNT125300002.htm. Product Transparency Documents Available for green building certifications "
+  },
+  {
+    "id": "legal_04",
+    "domain": "legal",
+    "query": "Does Kohler offer product transparency documents for green building certifications?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.025285542011260986,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "green building",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      },
+      {
+        "fact": "transparency",
+        "bench": "GEN_MISS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "The terms for service warranty non-conformities are described in Section 10.3 of the agreement. Warranty Documentation Review the warranty documentation provided with the product.  Contact Information Call 1-800-4KOHLER (1-800-456-4537).  Call 1-800-4KOHLER (1-800-456-4537) or review the warranty documentation provided with the product."
+  },
+  {
+    "id": "legal_05",
+    "domain": "legal",
+    "query": "What is covered under the faucet warranty?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.210762619972229,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [
+      {
+        "fact": "Lifetime Limited Warranty",
+        "bench": "PASS",
+        "in_context_loose": true
+      },
+      {
+        "fact": "faucet",
+        "bench": "PASS",
+        "in_context_loose": true
+      }
+    ],
+    "bench_answer": "Faucets have a Lifetime Limited Warranty. Warranty Type Lifetime Limited Warranty "
+  },
+  {
+    "id": "noanswer_01",
+    "domain": "legal",
+    "query": "What is Kohler's exact stock price target for next quarter?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.39722585678100586,
+    "bench_no_answer": false,
+    "agent_domain": null,
+    "facts": [],
+    "expected_no_answer": true,
+    "honesty_ok": false,
+    "bench_answer": "Services can be paid with Visa, Mastercard, Discover, and American Express credit cards, and debit cards. A pre-authorization or hold is placed on the card at checkout, which is removed and charged after the service is completed and the Acknowledgement of Service Completion form is signed. Payment Methods Visa, Mastercard, Discover, American Express credit cards, and debit cards  Checkout Process Pre-authorization or hold on the card  Service Completion Hold removed and full charge applied after signing the Acknowledgement of Service Completion form  Select the desired service and proceed to c"
+  },
+  {
+    "id": "noanswer_02",
+    "domain": "privacy",
+    "query": "What is the home address of Kohler's CEO?",
+    "retrieval_confident": true,
+    "best_dense_distance": 0.2790182828903198,
+    "bench_no_answer": true,
+    "agent_domain": null,
+    "facts": [],
+    "expected_no_answer": true,
+    "honesty_ok": true,
+    "bench_answer": "The provided context does not contain the home address of Kohler's CEO."
+  }
+]

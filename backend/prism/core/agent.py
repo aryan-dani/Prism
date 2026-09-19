@@ -36,6 +36,7 @@ from prism.core.text_utils import (
     detect_output_constraint,
     extract_claimed_inr_amounts,
     extract_model_numbers,
+    filter_cross_jurisdiction_chunks,
     is_contractor_damage_query,
     is_conversation_memory_query,
     is_false_premise_probe,
@@ -43,6 +44,8 @@ from prism.core.text_utils import (
     is_policy_override_attempt,
     is_prompt_exfil_or_jailbreak,
     is_pure_reformat_request,
+    is_soft_policy_tamper_request,
+    is_soft_prompt_exfil_request,
     memory_lookback_offset,
     needs_multi_domain_retrieval,
     prefers_email_draft,
@@ -261,15 +264,17 @@ def _commit_answer(
 
 
 def _filter_noise_chunks(query: str, chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
-    if not is_contractor_damage_query(query):
-        return chunks
-    filtered = []
-    for c in chunks:
-        blob = f"{c.metadata.get('title', '')} {c.text}".lower()
-        if any(n in blob for n in DESIGN_SERVICE_NOISE):
-            continue
-        filtered.append(c)
-    return filtered or chunks
+    out = chunks
+    if is_contractor_damage_query(query):
+        filtered = []
+        for c in out:
+            blob = f"{c.metadata.get('title', '')} {c.text}".lower()
+            if any(n in blob for n in DESIGN_SERVICE_NOISE):
+                continue
+            filtered.append(c)
+        out = filtered or out
+    out = filter_cross_jurisdiction_chunks(query, out)
+    return out
 
 
 def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -> RetrievalResult:
@@ -700,6 +705,20 @@ def handle_turn(
     _emit(on_status, "routing")
     if forced_domain:
         domain = forced_domain
+        route_result = None
+    elif is_soft_policy_tamper_request(effective_query):
+        # Deliberately NOT a deterministic refuse here -- this is meant to go
+        # through real generation so polish_answer's post-hoc catch actually
+        # exercises the LLM (defense-in-depth: catch it even if the model
+        # complies). But that catch only runs inside generate_answer/
+        # polish_answer -- if routing lands on "ambiguous" first, the agent
+        # returns a clarifying question and generation never happens, so the
+        # catch never fires either. Force a concrete domain so this always
+        # reaches generation instead of exiting through the clarify branch.
+        domain = "finance"
+        route_result = None
+    elif is_soft_prompt_exfil_request(effective_query):
+        domain = "legal"
         route_result = None
     elif is_contractor_damage_query(effective_query):
         domain = "customer_support"
