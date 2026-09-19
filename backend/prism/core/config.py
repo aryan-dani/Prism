@@ -17,6 +17,7 @@ RAW_DIR = DATA_DIR / "raw"
 PROCESSED_DIR = DATA_DIR / "processed"
 SYNTHETIC_DIR = DATA_DIR / "synthetic"
 CHROMA_DIR = DATA_DIR / "chroma"
+UPLOAD_DIR = DATA_DIR / "uploads"
 SESSIONS_DB = DATA_DIR / "sessions.db"
 EVAL_DIR = REPO_ROOT / "eval"
 DOCS_DIR = REPO_ROOT.parent / "docs"
@@ -64,6 +65,29 @@ ROUTER_MIN_CONFIDENCE = 0.30
 # spikes on 8GB VRAM). Override with e.g. PRISM_OLLAMA_KEEP_ALIVE=10m or -1 (forever).
 OLLAMA_KEEP_ALIVE = os.environ.get("PRISM_OLLAMA_KEEP_ALIVE", "25m")
 
+# TITLE_MODEL gets its own keep-alive policy, separate from GEN_MODEL/EMBED_MODEL.
+# Measured on this 8GB card (nvidia-smi): all three models held resident at
+# once leaves ~100-200MB VRAM free, which is not enough slack for the KV
+# cache to grow on longer conversations -- Windows silently falls back to
+# system-RAM paging for the overflow, which is where the 50-180s latency
+# spikes on multi-turn/anaphoric queries come from (verified: short
+# single-turn calls stay in the 2-15s range on the same box when VRAM has
+# headroom). A time-based short keep-alive (e.g. "2m") still loses the race
+# under heavy session churn -- titling on turn 1 of every new session keeps
+# resetting the timer before it ever idles out. "0" unloads immediately
+# after each title call instead, guaranteeing GEN_MODEL always has the
+# ~2GB back. TITLE_MODEL reloads fast (disk-cached) and generate_title_fast
+# already has a 2.5s timeout + heuristic fallback, so an occasional slower
+# reload never blocks a real chat turn.
+OLLAMA_TITLE_KEEP_ALIVE = os.environ.get("PRISM_OLLAMA_TITLE_KEEP_ALIVE", "0")
+
+# Hard ceiling on a single Ollama request (chat or embeddings). Under GPU/VRAM
+# contention a call can stall well past any sane user-facing wait; bounding it
+# turns a silent hang into a fast, catchable timeout (see agent._safe_generate_answer)
+# so the API can return an honest "please retry" answer instead of hanging the
+# request forever. Generous relative to normal latency (~2-15s) on purpose.
+OLLAMA_REQUEST_TIMEOUT_S = float(os.environ.get("PRISM_OLLAMA_TIMEOUT_S", "75"))
+
 # Relevance floor for the "no confident answer" honesty path. Distances are
 # cosine distances from Chroma (0 = identical). Legal/Privacy get a stricter
 # (lower distance = higher required similarity) floor than other domains.
@@ -100,6 +124,39 @@ REQUEST_TIMEOUT = 30
 # category table, blew past 2048 and failed the embedding call outright).
 MAX_CHUNK_TOKENS = 1500  # only split an article/section if it exceeds this
 
+# Session document uploads (ad-hoc RAG, separate from the five KBs)
+UPLOAD_MAX_BYTES = int(os.environ.get("PRISM_UPLOAD_MAX_BYTES", str(12 * 1024 * 1024)))
+UPLOAD_MAX_CHUNKS = int(os.environ.get("PRISM_UPLOAD_MAX_CHUNKS", "80"))
+UPLOAD_ALLOWED_SUFFIXES = {
+    ".pdf",
+    ".txt",
+    ".md",
+    ".markdown",
+    ".csv",
+    ".json",
+    ".html",
+    ".htm",
+    ".docx",
+}
+CHROMA_UPLOADS_COLLECTION = "prism_uploads"
+# Smaller chunks than the KB (1500) — ad-hoc docs are read once, so tighter
+# passages retrieve better and keep the prompt short on 8GB VRAM.
+UPLOAD_CHUNK_TOKENS = int(os.environ.get("PRISM_UPLOAD_CHUNK_TOKENS", "450"))
+# Ephemeral by design: vectors + files are purged after this many hours
+# (checked at API startup) and immediately on session delete.
+UPLOAD_TTL_HOURS = float(os.environ.get("PRISM_UPLOAD_TTL_HOURS", "24"))
+# A user who just attached a file is usually asking about it: for the next N
+# turns the upload path accepts a looser dense floor before falling back to
+# the five permanent knowledge bases.
+UPLOAD_RECENT_TURNS = int(os.environ.get("PRISM_UPLOAD_RECENT_TURNS", "4"))
+UPLOAD_RELEVANCE_FLOOR = 0.58
+UPLOAD_RELEVANCE_FLOOR_RECENT = 0.66
+# Comparative gate: an implicit (non-pointed) question only goes to the upload
+# when its best upload distance is within this margin of the best distance in
+# the five permanent KBs. Calibrated on nomic-embed-text: related queries land
+# within ~0.01 of the KB (or beat it); unrelated ones trail by >= 0.15.
+UPLOAD_KB_MARGIN = float(os.environ.get("PRISM_UPLOAD_KB_MARGIN", "0.06"))
+
 
 @dataclass
 class RuntimeInfo:
@@ -113,5 +170,5 @@ class RuntimeInfo:
 
 
 def ensure_dirs() -> None:
-    for d in (RAW_DIR, PROCESSED_DIR, SYNTHETIC_DIR, CHROMA_DIR, EVAL_DIR / "results"):
+    for d in (RAW_DIR, PROCESSED_DIR, SYNTHETIC_DIR, CHROMA_DIR, UPLOAD_DIR, EVAL_DIR / "results"):
         d.mkdir(parents=True, exist_ok=True)

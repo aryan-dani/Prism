@@ -9,8 +9,10 @@ session start, plus optionally once more if the topic shifts domain later.
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+
 from prism.core.config import TITLE_MODEL
-from prism.core.ollama_client import get_ollama_client, keep_alive_value
+from prism.core.ollama_client import get_ollama_client, title_keep_alive_value
 
 TITLE_SYSTEM_PROMPT = (
     "Generate a short, descriptive chat title (max 6 words, no quotes, no trailing punctuation, no JSON). "
@@ -40,9 +42,20 @@ def generate_title(first_user_message: str) -> str:
             {"role": "user", "content": first_user_message[:500]},
         ],
         options={"temperature": 0.3, "num_predict": 20},
-        keep_alive=keep_alive_value(),
+        keep_alive=title_keep_alive_value(),
     )
     return _sanitize_title(resp["message"]["content"], first_user_message)
+
+
+def generate_title_fast(first_user_message: str, *, timeout_s: float = 2.5) -> str:
+    """Same as generate_title, but never block the chat turn on a cold 3B swap."""
+    fallback = " ".join(first_user_message.replace("?", "").split()[:6]) or "New conversation"
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        fut = pool.submit(generate_title, first_user_message)
+        try:
+            return fut.result(timeout=timeout_s)
+        except (FuturesTimeout, Exception):
+            return fallback
 
 
 def maybe_retitle(*, current_title: str | None, new_domain: str, first_message_of_new_domain: str) -> str | None:
@@ -51,8 +64,8 @@ def maybe_retitle(*, current_title: str | None, new_domain: str, first_message_o
     gate (domain name not mentioned in title) avoids calling the LLM on every
     domain switch."""
     if not current_title:
-        return generate_title(first_message_of_new_domain)
+        return generate_title_fast(first_message_of_new_domain)
     domain_words = new_domain.replace("_", " ").split()
     if any(w.lower() in current_title.lower() for w in domain_words):
         return None
-    return generate_title(first_message_of_new_domain)
+    return generate_title_fast(first_message_of_new_domain)

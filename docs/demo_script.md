@@ -1,44 +1,51 @@
 # Prism — Demo Script (1–3 minutes)
 
-Record this exact flow. It deliberately hits the evaluation beats: numeric exactness, domain switch, clarification, and multi-format render from one canonical answer.
+Record this exact flow. It hits numeric exactness, domain switch, **live upload**, water-conservation callout, and multi-format render.
 
 ## Setup before recording
-1. Ollama running; generation model loaded (`qwen2.5:7b-instruct` or the winner from `docs/decisions.md` §3).
+1. Ollama running; generation model loaded (`qwen2.5:7b-instruct`).
 2. API: `uv run uvicorn prism.api.main:app --port 8000`
-3. UI: `cd web; npm run dev` → http://localhost:5173
-4. New conversation. Full screen. Hide personal desktop clutter.
+3. UI: `cd frontend; npm run dev` → http://localhost:5173
+4. Start on the **landing page**, then enter chat. Full screen. Hide personal desktop clutter.
+5. Have a small markdown/PDF on the desktop (e.g. a one-page “Orion travel policy” with a ₹3,250 per-diem).
 
-## Script (~2:00)
+## Script (~2:20)
 
-**0:00–0:15 — Hook**  
-Voiceover: “Prism is one local agent across five Kohler enterprise domains — HR, Finance, Customer Support, Privacy, and Legal — with answers you can reformat on demand.”  
-Show the empty state with domain chips.
+**0:00–0:20 — Hook (lead with the upload)**  
+Landing: “One query, any format.” Click **Try the live demo**.  
+Drop `orion_travel_policy.md` onto the composer. Wait for the “active” chip.  
+Ask: `According to this document, who approves a claim of INR 45,000?`  
+Expect: domain chip **uploaded doc**, “department head”, source `upload://…`.  
+Voiceover: “A sixth domain that exists only for this chat — parsed, embedded, and answered locally. Delete the session and the vectors go with it.”
 
-**0:15–0:40 — Finance exactness**  
-Ask: `An employee submits an expense claim for ₹15,000. Who needs to approve it?`  
-Expect: Reporting Manager (band ₹5,001–₹25,000), high confidence, Finance domain chip.  
-Voiceover: “Hard numeric thresholds — the agent has to get the band exactly right.”
+**0:20–0:45 — Finance exactness (five KBs still work)**  
+New conversation. Ask: `An employee submits an expense claim for ₹15,000. Who needs to approve it?`  
+Expect: Reporting Manager, band ₹5,001–₹25,000, Finance chip.
 
-**0:40–1:05 — Domain switch (no restating context)**  
+**0:45–1:10 — Domain switch + water callout**  
 Ask: `My toilet is occasionally leaking or running — what should I check?`  
-Expect: domain chip flips to Customer Support; steps about trip lever / flapper / canister.  
-Voiceover: “Mid-conversation domain switch — retrieval re-routes without a new session.”
+Expect: Customer Support chip, trip-lever / flapper steps, **green water-conservation callout** with EPA liters/day.  
+Voiceover: “Mid-conversation domain switch — and a labeled water-waste estimate from published EPA figures, not the model.”
 
-**1:05–1:25 — Anaphora follow-up**  
-Ask: `What about that flapper seal you mentioned?`  
-Expect: grounded follow-up using prior context.
+**1:10–1:25 — Anaphora**  
+Ask: `actually is that covered under warranty`  
+Expect: a warranty-aware follow-up, not a repeat of the flapper steps.
 
-**1:25–1:45 — Clarification moment**  
-New chat (or a deliberately ambiguous ask): `What's the policy on returns and leave?`  
-Expect: clarification question with HR vs Customer Support (or similar) — answer the chip.  
-Voiceover: “When routing is ambiguous, Prism asks — it doesn’t guess.”
+**1:25–1:55 — One answer, five formats**  
+On the Finance or Support answer: **Prose → JSON → XML → Excel download → Email**.  
+Voiceover: “Same canonical object — no re-retrieval.”
 
-**1:45–2:10 — One answer, five formats**  
-Back on a solid Finance or Support answer. Click format bar: **JSON → XML → Excel download → Email**.  
-Voiceover: “Same canonical answer object — no re-retrieval, no re-prompting.”
-
-**2:10–2:20 — Close**  
+**1:55–2:10 — Close**  
 “Runs fully local on Ollama within 8GB VRAM. Prism — one query, any format.”
+
+## Checklist while editing
+- [ ] Landing page in the first 10 seconds
+- [ ] Upload chip “active” + “Local only · purged with this chat”
+- [ ] Water callout visible
+- [ ] Session title auto-updating
+- [ ] Excel actually downloading
+- [ ] Caption: “Academic case study · synthetic HR/Finance · real Kohler Support/Privacy/Legal · uploads stay on-device”
+
 
 ## Checklist while editing
 - [ ] Show session title auto-updating after first turn

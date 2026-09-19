@@ -21,6 +21,11 @@ if (Test-Path "$root\frontend\package.json") {
     Write-Host "   (frontend/ not found, skipping)" -ForegroundColor Yellow
 }
 
+Write-Host "==> Building (or rebuilding) the local Chroma + BM25 index" -ForegroundColor Cyan
+Push-Location "$root\backend"
+uv run python -m prism.ingest.build_index
+Pop-Location
+
 Write-Host "==> Setup complete." -ForegroundColor Green
 Write-Host "Next steps:"
 Write-Host "  powershell -File scripts/start.ps1   # or simply: .\start.ps1"

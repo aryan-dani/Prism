@@ -23,6 +23,23 @@ async def lifespan(_app: FastAPI):
         warm_models([EMBED_MODEL, TITLE_MODEL, GEN_MODEL])
     except Exception:
         pass
+    # Ephemeral uploads: purge anything past its TTL and drop stale refs from
+    # persisted sessions so the UI never shows a chip for vectors that are gone.
+    try:
+        from prism.core.memory import get_session_store
+        from prism.core.uploads import get_upload_store
+
+        purged = get_upload_store().purge_expired()
+        if purged:
+            sessions = get_session_store()
+            for sid, doc_ids in purged.items():
+                state = sessions.load(sid)
+                if state is None:
+                    continue
+                state.uploaded_docs = [d for d in state.uploaded_docs if d.id not in doc_ids]
+                sessions.save(state)
+    except Exception:
+        pass
     yield
 
 

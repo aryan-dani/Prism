@@ -435,14 +435,29 @@ button {
   margin-bottom: 0.55rem;
 }
 
+.brand-home {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 0;
+  color: inherit;
+}
+
+.brand-home:hover .brand-mark {
+  color: var(--accent);
+}
+
 .format-btn {
   border: 1px solid var(--line);
   border-radius: 999px;
-  padding: 0.35rem 0.75rem;
+  padding: 0.42rem 0.9rem;
   background: rgba(250, 247, 241, 0.9);
   color: var(--ink-soft);
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
 .format-btn:disabled {
@@ -453,11 +468,204 @@ button {
 .format-btn:not(:disabled):hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.format-json:not(:disabled),
+.format-xml:not(:disabled),
+.format-excel:not(:disabled),
+.format-email:not(:disabled) {
+  background: #fff;
+}
+
+.suggestion-domain {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+}
+
+.suggestion-hint {
+  margin: 0.85rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.water-callout {
+  margin-top: 0.85rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid #9ecabb;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.water-callout strong {
+  display: block;
+  margin-bottom: 0.2rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Landing page */
+.landing {
+  height: 100%;
+  overflow-y: auto;
+  padding: 1.25rem 1.5rem 3rem;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.landing-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2rem;
+}
+
+.landing-hero h1 {
+  margin: 0.35rem 0 0.75rem;
+  font-family: var(--display);
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  font-weight: 400;
+  line-height: 1.05;
+}
+
+.landing-kicker {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.landing-lead {
+  margin: 0;
+  max-width: 40rem;
+  font-size: 1.08rem;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+
+.landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 1.4rem;
+}
+
+.landing-cta {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.8rem 1.35rem;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}
+
+.landing-cta.ghost {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.landing-meta {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.landing-domains {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.7rem;
+  margin-top: 2.4rem;
+}
+
+.landing-card {
+  padding: 0.95rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(250, 247, 241, 0.88);
+}
+
+.landing-card h2 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+}
+
+.landing-card p {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--ink-soft);
+}
+
+.landing-card.domain-uploaded {
+  border-color: #c9b58f;
+  background: #f7efdc;
+}
+
+.landing-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.9rem;
+  margin-top: 2.4rem;
+}
+
+.landing-step {
+  padding: 0.2rem 0.2rem 0.4rem;
+}
+
+.landing-n {
+  display: inline-flex;
+  width: 1.6rem;
+  height: 1.6rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.landing-step h3 {
+  margin: 0.45rem 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.landing-step p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.landing-try {
+  margin-top: 2.6rem;
+}
+
+.landing-try h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: 1.7rem;
+}
+
+.landing-suggestions {
+  margin-top: 0.9rem;
 }
 
 .composer {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto 1fr auto;
   gap: 0.65rem;
   align-items: end;
   padding: 0.7rem 0.75rem;
@@ -465,6 +673,109 @@ button {
   border-radius: 20px;
   background: rgba(250, 247, 241, 0.95);
   box-shadow: var(--shadow);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.composer-shell.drag-over .composer {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow);
+}
+
+.attach {
+  width: 40px;
+  height: 40px;
+  margin-bottom: 0.15rem;
+  border: 1px dashed var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 1.25rem;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.attach:not(:disabled):hover {
+  border-color: var(--accent);
+  border-style: solid;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.attach:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Attached-document chips (ephemeral "uploaded" domain) */
+.upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.upload-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: 100%;
+  padding: 0.28rem 0.4rem 0.28rem 0.6rem;
+  border: 1px solid #c9b58f;
+  border-radius: 999px;
+  background: #f7efdc;
+  color: #5b4a22;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.upload-icon {
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--accent-hot);
+}
+
+.upload-name {
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-state {
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.upload-remove {
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #5b4a22;
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+.upload-remove:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.upload-note {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.chip.upload-domain {
+  background: #f7efdc;
+  border-color: #c9b58f;
+  color: #5b4a22;
 }
 
 .composer textarea {

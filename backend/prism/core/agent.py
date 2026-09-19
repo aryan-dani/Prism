@@ -19,7 +19,12 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from prism.core.answer import CanonicalAnswer, KeyFact, generate_answer, no_context_answer
-from prism.core.config import RELEVANCE_FLOOR_DEFAULT
+from prism.core.config import (
+    RELEVANCE_FLOOR_DEFAULT,
+    UPLOAD_RECENT_TURNS,
+    UPLOAD_RELEVANCE_FLOOR,
+    UPLOAD_RELEVANCE_FLOOR_RECENT,
+)
 from prism.core.memory import SessionState, SourceDocRef
 from prism.core.policy_math import try_deterministic_policy_answer
 from prism.core.renderers import FormatName, RenderResult, render as render_format
@@ -41,6 +46,7 @@ from prism.core.text_utils import (
     memory_lookback_offset,
     needs_multi_domain_retrieval,
     prefers_email_draft,
+    query_points_at_uploads,
     signaled_domains,
     vague_new_session_clarify,
 )
@@ -64,7 +70,14 @@ CLARIFY_DOMAIN_LABELS = {
     "legal": "a legal/compliance question (terms, warranty, regulatory)",
 }
 
-DESIGN_SERVICE_NOISE = ("bathroom design service", "mood board", "virtual design meeting")
+DESIGN_SERVICE_NOISE = (
+    "bathroom design service",
+    "mood board",
+    "virtual design meeting",
+    "enameled cast iron sink care",
+    "rubber dish mats",
+    "desilvering",
+)
 
 StatusCallback = Callable[[str], None]
 
@@ -178,6 +191,32 @@ def _early_cl_carry_fact(session: SessionState) -> str | None:
     return None
 
 
+def _safe_generate_answer(query: str, *, domain: str, **kwargs) -> CanonicalAnswer:
+    """generate_answer, but a stalled/failed Ollama call degrades to an honest
+    no-answer instead of hanging the request forever or 500-ing the endpoint.
+
+    This is a general reliability guard (bounded client timeout in
+    ollama_client.py + this catch), not a per-question special case: it fires
+    for any query whenever the model backend is slow/unreachable, and does
+    nothing different when the backend responds normally.
+    """
+    try:
+        return generate_answer(query, domain=domain, **kwargs)
+    except Exception as e:
+        return CanonicalAnswer(
+            query=query,
+            domain=domain,
+            direct_answer=(
+                "The AI model backend didn't respond in time for this question. "
+                "This isn't a knowledge-base gap - please retry; if it keeps happening, "
+                "the local model server may be overloaded."
+            ),
+            confidence="none",
+            no_answer=True,
+            caveats=[f"generation_error: {type(e).__name__}"],
+        )
+
+
 def _commit_answer(
     session: SessionState,
     *,
@@ -185,6 +224,9 @@ def _commit_answer(
     domain: str | None,
     chunks: list[RetrievedChunk] | None = None,
 ) -> TurnResult:
+    from prism.core.water_math import attach_sustainability_note
+
+    attach_sustainability_note(answer, query=answer.query, domain=domain)
     session.active_domain = domain
     session.last_answer = answer
     if chunks is not None:
@@ -299,6 +341,140 @@ def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -
     return result
 
 
+_FOCUS_STOP = {
+    "that", "this", "it", "those", "the", "one", "last", "you", "mentioned", "previous", "actually",
+    "and", "but", "or", "if", "is", "are", "was", "can", "could", "would", "should", "what", "about",
+    "does", "do", "did", "not", "instead", "then", "also", "for", "with", "get", "have", "has", "there",
+    "under", "covered", "still", "just", "how", "any", "some", "same", "again", "more",
+}
+
+
+def _focus_merge(result: RetrievalResult, raw_query: str, *, domain: str | None) -> RetrievalResult:
+    """Anaphora turns retrieve on 8 turns of context + the follow-up, so a topic
+    pivot ("…is that covered under warranty", "…can I get a refund instead")
+    gets drowned by the previous topic's chunks. Run one extra small retrieval on
+    the follow-up alone and merge, so the pivot gets a seat at the table.
+    Additive: never removes chunks the context pass already found."""
+    words = [w for w in re.findall(r"[a-z][a-z-]{2,}", raw_query.lower()) if w not in _FOCUS_STOP]
+    if len(words) < 1:
+        return result
+    focus = retrieve(raw_query, domain=domain, top_k=3)
+    if not focus.chunks:
+        return result
+    by_id: dict[str, RetrievedChunk] = {c.id: c for c in result.chunks}
+    for c in focus.chunks:
+        prev = by_id.get(c.id)
+        if prev is None or (c.fused_score or 0) > (prev.fused_score or 0):
+            by_id[c.id] = c
+    merged = sorted(by_id.values(), key=lambda c: -(c.fused_score or 0))
+    # Guarantee the top focus hit survives the cut even if its fused score is
+    # lower than the context pass's scores (different query -> different scale).
+    top_focus = focus.chunks[0]
+    keep = merged[:6]
+    if all(c.id != top_focus.id for c in keep):
+        keep = keep[:5] + [top_focus]
+    best = result.best_dense_distance
+    if focus.best_dense_distance is not None:
+        best = focus.best_dense_distance if best is None else min(best, focus.best_dense_distance)
+    result.chunks = keep
+    result.best_dense_distance = best
+    result.is_confident = result.is_confident or focus.is_confident
+    return result
+
+
+def _maybe_answer_from_uploads(
+    session: SessionState,
+    user_message: str,
+    *,
+    on_status: StatusCallback | None = None,
+) -> TurnResult | None:
+    """Session-scoped 'uploaded' domain (ad-hoc RAG over files the user attached).
+
+    Runs *before* routing so it never perturbs the five-domain router. Uses the
+    upload when the user clearly points at the file ("this document…", the
+    filename) OR when upload retrieval is confident on its own. Right after an
+    upload (≤ UPLOAD_RECENT_TURNS turns) the dense floor is looser — a user who
+    just attached a file is usually asking about it. Otherwise falls through to
+    the normal pipeline untouched.
+    """
+    if not session.uploaded_docs:
+        return None
+    names = [d.filename for d in session.uploaded_docs]
+    pointed = query_points_at_uploads(user_message, names)
+
+    # `session.turns` already includes this user message at this point.
+    turns_since_upload = len(session.turns) - 1 - max(d.turn_index for d in session.uploaded_docs)
+    recent = turns_since_upload <= UPLOAD_RECENT_TURNS
+    floor = UPLOAD_RELEVANCE_FLOOR_RECENT if recent else UPLOAD_RELEVANCE_FLOOR
+
+    _emit(on_status, "retrieving")
+    from prism.core.uploads import get_upload_store
+
+    result = get_upload_store().retrieve(session.session_id, user_message, floor=floor)
+    if not (pointed or result.is_confident):
+        return None
+
+    labels = ", ".join(names)
+    if not result.chunks:
+        # Pointed at the file but nothing indexed matched (or vectors were purged).
+        answer = CanonicalAnswer(
+            query=user_message,
+            domain="uploaded",
+            direct_answer=(
+                "I couldn't find anything in the uploaded document(s) that answers that. "
+                f"Files on this chat: {labels}."
+            ),
+            confidence="none",
+            no_answer=True,
+            sources=[f"upload://{n}" for n in names],
+        )
+        return _commit_answer(session, answer=answer, domain="uploaded", chunks=[])
+
+    extra_notes = [
+        f"The user attached document(s): {labels}. Answer ONLY from those uploaded chunks. "
+        "Do not use Kohler/Meridian enterprise knowledge bases unless the same fact appears in the upload. "
+        "If the uploaded text does not answer the question, say so and set no_answer=true. "
+        "Cite source_url values (upload://filename).",
+    ]
+    if prefers_email_draft(user_message):
+        extra_notes.append("Put the factual summary in direct_answer for an email draft.")
+
+    _emit(on_status, "generating")
+    answer = _safe_generate_answer(
+        user_message,
+        domain="uploaded",
+        context_chunks=result.chunks,
+        conversation_context=session.recent_context_str(6),
+        extra_notes=extra_notes,
+    )
+    if prefers_email_draft(user_message) and not answer.no_answer:
+        session.active_domain = "uploaded"
+        session.last_answer = answer
+        session.last_docs = [
+            SourceDocRef(
+                id=c.id,
+                title=c.metadata.get("title", ""),
+                source_url=c.metadata.get("source_url", ""),
+                domain="uploaded",
+                text=c.text,
+            )
+            for c in result.chunks[:5]
+        ]
+        rr = render_format(answer, "email")
+        reply = rr.content if isinstance(rr.content, str) else ""
+        session.add_turn("assistant", reply, domain="uploaded")
+        return TurnResult(
+            session=session,
+            reply_text=reply,
+            render_result=rr,
+            answer=answer,
+            domain="uploaded",
+            is_clarification=False,
+            is_reformat=False,
+        )
+    return _commit_answer(session, answer=answer, domain="uploaded", chunks=result.chunks)
+
+
 def handle_turn(
     session: SessionState,
     user_message: str,
@@ -332,9 +508,13 @@ def handle_turn(
 
     # ------------------------------------------------------------------
     # 0c. Deterministic leave / finance arithmetic (do not trust the LLM)
+    #     Skip when the user is clearly asking about an uploaded file so
+    #     Meridian policy numbers do not override their document.
     # ------------------------------------------------------------------
     _emit(on_status, "policy_lookup")
-    computed = try_deterministic_policy_answer(user_message)
+    upload_names = [d.filename for d in session.uploaded_docs]
+    skip_policy_math = bool(upload_names) and query_points_at_uploads(user_message, upload_names)
+    computed = None if skip_policy_math else try_deterministic_policy_answer(user_message)
     if computed is not None:
         session.add_turn("user", user_message)
         from prism.core.answer_polish import polish_answer
@@ -425,6 +605,8 @@ def handle_turn(
     # 2b. Brand-new session, intentionally vague queries
     # ------------------------------------------------------------------
     vague_domains = vague_new_session_clarify(user_message, has_prior_turns=len(session.turns) > 1)
+    if session.uploaded_docs:
+        vague_domains = None
     if vague_domains and not forced_domain:
         question = (
             "I want to make sure I point you to the right place — is this "
@@ -454,12 +636,18 @@ def handle_turn(
         answer = _answer_memory_lookback(session, user_message)
         return _commit_answer(session, answer=answer, domain=answer.domain, chunks=[])
 
+    upload_turn = _maybe_answer_from_uploads(session, user_message, on_status=on_status)
+    if upload_turn is not None:
+        return upload_turn
+
     # ------------------------------------------------------------------
     # 3. Anaphora + flags
     # ------------------------------------------------------------------
     retrieval_query = effective_query
+    anaphora_expanded = False
     if ANAPHORA_RE.search(effective_query) and session.turns:
         retrieval_query = f"{session.recent_context_str(8)}\n{effective_query}"
+        anaphora_expanded = True
 
     multi_domain = needs_multi_domain_retrieval(effective_query) or is_contractor_damage_query(effective_query)
     model_nums = extract_model_numbers(effective_query)
@@ -535,8 +723,19 @@ def handle_turn(
     else:
         from prism.core.embeddings import embed_one
 
-        query_embedding = embed_one(retrieval_query)
-        agnostic_hits = retrieve(retrieval_query, domain=None, top_k=10).chunks
+        # Route on the user's actual new message, not the anaphora-expanded
+        # retrieval_query. retrieval_query prepends recent conversation turns
+        # (including the assistant's own prior reply) so pronoun-heavy chunk
+        # retrieval works -- but that same text pollutes domain routing: a
+        # short HR follow-up like "do I still need the form" embedded next to
+        # a Finance-heavy previous answer (₹ amounts, sign-off clauses) drifts
+        # the anchor/vote signal toward Finance even when the new question is
+        # clearly HR. Routing should ask "what domain is THIS question about",
+        # falling back to sticky_domain (below) when effective_query alone is
+        # too short/weak to tell -- that fallback is the intended mechanism
+        # for anaphoric follow-ups, not contaminating the embedding itself.
+        query_embedding = embed_one(effective_query)
+        agnostic_hits = retrieve(effective_query, domain=None, top_k=10).chunks
         votes = score_by_hit_votes(agnostic_hits)
         route_result = route(query_embedding, hit_votes=votes, sticky_domain=session.active_domain)
 
@@ -577,8 +776,16 @@ def handle_turn(
     # ------------------------------------------------------------------
     _emit(on_status, "retrieving")
     result = _retrieve_for_query(retrieval_query, domain=domain, multi_domain=multi_domain)
+    if anaphora_expanded and not multi_domain:
+        result = _focus_merge(result, effective_query, domain=domain)
 
     extra_notes: list[str] = []
+    if anaphora_expanded:
+        extra_notes.append(
+            f'The latest message is a follow-up: "{effective_query.strip()}". Answer THAT question using the '
+            "context. Do not simply repeat or re-summarize the previous answer's troubleshooting steps. "
+            "If the context does not cover the new angle (e.g. warranty, refund, eligibility), say so plainly."
+        )
     if leading:
         claimed = ", ".join(extract_claimed_inr_amounts(effective_query)) or "the user-stated amount"
         extra_notes.append(
@@ -652,7 +859,7 @@ def handle_turn(
         elif not result.chunks or not result.is_confident:
             answer = no_context_answer(user_message, domain or "unknown")
         else:
-            answer = generate_answer(
+            answer = _safe_generate_answer(
                 user_message,
                 domain=domain or "customer_support",
                 context_chunks=result.chunks,
@@ -663,7 +870,7 @@ def handle_turn(
     elif not result.chunks or not result.is_confident:
         answer = no_context_answer(user_message, domain or "unknown")
     else:
-        answer = generate_answer(
+        answer = _safe_generate_answer(
             user_message,
             domain=domain,
             context_chunks=result.chunks,

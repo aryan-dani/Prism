@@ -166,7 +166,14 @@ def generate_answer(
                 {"role": "user", "content": user_prompt},
             ],
             format="json",
-            options={"temperature": 0.1},
+            # num_predict bounds worst-case generation time. Our CanonicalAnswer
+            # JSON (direct_answer + key_facts + steps + caveats) has never run
+            # past a few hundred tokens in practice; 900 gives real headroom
+            # without letting a runaway completion burn GPU time for no
+            # benefit (pure latency-tail cut, not a content/accuracy change --
+            # if a response is ever legitimately cut short, JSON parsing fails
+            # and the existing repair-retry/no-answer fallback below handles it).
+            options={"temperature": 0.1, "num_predict": 900},
             keep_alive=keep_alive_value(),
         )
         raw = resp["message"]["content"]

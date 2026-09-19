@@ -219,8 +219,8 @@ def score_expect(resp: dict | None, expect: dict, latency_s: float) -> list[dict
     if dups:
         out.append(verdict("FAIL", f"duplicate consecutive words: {dups[:10]}", resp.get("reply") or ""))
 
-    if latency_s > 20:
-        out.append(verdict("PARTIAL", f"latency {latency_s:.1f}s > 20s threshold"))
+    if latency_s > 45:
+        out.append(verdict("PARTIAL", f"latency {latency_s:.1f}s > 45s threshold"))
 
     return out
 

@@ -3,15 +3,19 @@ import {
   chatStream,
   createSession,
   deleteSession,
+  deleteUpload,
   downloadExcelUrl,
   getHealth,
   getSession,
   listSessions,
   renderFormat,
+  uploadDocument,
   type ChatResponse,
   type Health,
   type SessionSummary,
+  type UploadedDoc,
 } from './api'
+import { SUGGESTION_HINT, SUGGESTIONS } from './suggestions'
 import './index.css'
 
 type Message = {
@@ -24,19 +28,34 @@ type Message = {
   noAnswer?: boolean
   sources?: ChatResponse['sources']
   availableFormats?: string[]
+  sustainabilityNote?: string | null
 }
 
-const SUGGESTIONS = [
-  'An employee submits an expense claim for ₹15,000. Who needs to approve it?',
-  'My toilet is occasionally leaking or running — what should I check?',
-  'How many casual leave days can I carry forward?',
-  'What personal information does Kohler collect?',
-]
+const FORMATS = [
+  { id: 'prose', label: 'Prose' },
+  { id: 'json', label: 'JSON' },
+  { id: 'xml', label: 'XML' },
+  { id: 'excel', label: 'Excel' },
+  { id: 'email', label: 'Email' },
+] as const
 
-const FORMATS = ['prose', 'json', 'xml', 'excel', 'email'] as const
+const UPLOAD_ACCEPT = '.pdf,.txt,.md,.markdown,.csv,.json,.html,.htm,.docx'
 
 function uid() {
   return crypto.randomUUID()
+}
+
+function domainLabel(d: string | null | undefined): string {
+  if (!d) return ''
+  if (d === 'uploaded') return 'uploaded doc'
+  return d.replaceAll('_', ' ')
+}
+
+function formatBytes(n?: number): string {
+  if (!n) return ''
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
 /** Keep sidebar/topbar titles human-readable when the titler returns junk. */
@@ -109,7 +128,13 @@ function AnswerStateBanner({ m }: { m: Message }) {
   return null
 }
 
-export default function App() {
+export default function App({
+  onHome,
+  seedQuestion,
+}: {
+  onHome?: () => void
+  seedQuestion?: string | null
+}) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -119,7 +144,11 @@ export default function App() {
   const [status, setStatus] = useState('Ready')
   const [panel, setPanel] = useState<{ format: string; content: string } | null>(null)
   const [formats, setFormats] = useState<string[]>(['prose'])
+  const [uploads, setUploads] = useState<UploadedDoc[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeId) ?? null,
@@ -129,6 +158,10 @@ export default function App() {
   useEffect(() => {
     void bootstrap()
   }, [])
+
+  useEffect(() => {
+    if (seedQuestion) setDraft(seedQuestion)
+  }, [seedQuestion])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -163,6 +196,7 @@ export default function App() {
     try {
       const detail = await getSession(id)
       setMessages(turnsToMessages(detail.turns))
+      setUploads(detail.uploaded_docs ?? [])
       setFormats(
         detail.available_formats?.length
           ? detail.available_formats
@@ -176,6 +210,7 @@ export default function App() {
     } catch (err) {
       setMessages([])
       setFormats(['prose'])
+      setUploads([])
       setStatus(err instanceof Error ? err.message : 'Failed to load session')
     }
   }
@@ -184,12 +219,43 @@ export default function App() {
     const created = await createSession()
     await refreshSessions()
     setActiveId(created.id)
+    setUploads([])
     if (clearMessages) {
       setMessages([])
       setPanel(null)
       setFormats(['prose'])
     }
     setStatus('New conversation')
+  }
+
+  async function attachFiles(files: FileList | File[] | null) {
+    if (!files || !activeId || uploading) return
+    const list = Array.from(files)
+    if (!list.length) return
+    setUploading(true)
+    for (const file of list) {
+      setStatus(`Indexing ${file.name} locally…`)
+      try {
+        const res = await uploadDocument(activeId, file)
+        setUploads(res.uploaded_docs)
+        setStatus(`Attached ${res.filename} · ${res.chunk_count} chunks · stays on this machine`)
+      } catch (err) {
+        setStatus(err instanceof Error ? `Upload failed: ${err.message}` : 'Upload failed')
+      }
+    }
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  async function removeUpload(docId: string) {
+    if (!activeId) return
+    try {
+      const res = await deleteUpload(activeId, docId)
+      setUploads(res.uploaded_docs)
+      setStatus('Removed attached document — its vectors were purged')
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : 'Failed to remove document')
+    }
   }
 
   async function selectSession(id: string) {
@@ -232,6 +298,7 @@ export default function App() {
           noAnswer: res.no_answer,
           sources: res.sources,
           availableFormats: res.available_formats,
+          sustainabilityNote: res.sustainability_note ?? null,
         },
       ])
       setFormats(res.available_formats.length ? res.available_formats : ['prose'])
@@ -240,8 +307,8 @@ export default function App() {
         res.is_clarification
           ? 'Waiting for clarification'
           : res.no_answer
-            ? `No confident answer · ${res.domain ?? 'general'}`
-            : `Answered · ${res.domain ?? 'general'} · ${res.confidence ?? 'n/a'} confidence`,
+            ? `No confident answer · ${domainLabel(res.domain) || 'general'}`
+            : `Answered · ${domainLabel(res.domain) || 'general'} · ${res.confidence ?? 'n/a'} confidence`,
       )
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Chat failed')
@@ -282,8 +349,10 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">Prism</div>
-          <div className="brand-sub">Kohler unified enterprise AI · local Ollama</div>
+          <button type="button" className="brand-home" onClick={onHome} title="Back to overview">
+            <div className="brand-mark">Prism</div>
+            <div className="brand-sub">Kohler unified enterprise AI · local Ollama</div>
+          </button>
         </div>
         <button className="new-chat" type="button" onClick={() => void startNewChat()}>
           New conversation
@@ -297,7 +366,7 @@ export default function App() {
                 onClick={() => void selectSession(s.id)}
               >
                 <div className="session-title">{displayTitle(s.title)}</div>
-                <div className="session-meta">{s.active_domain?.replaceAll('_', ' ') || 'no domain yet'}</div>
+                <div className="session-meta">{domainLabel(s.active_domain) || 'no domain yet'}</div>
               </button>
               <button
                 type="button"
@@ -331,9 +400,14 @@ export default function App() {
             <div className="chips" style={{ marginTop: 8 }}>
               {(health?.domains ?? ['hr', 'finance', 'customer_support', 'privacy', 'legal']).map((d) => (
                 <span key={d} className="chip">
-                  {d.replaceAll('_', ' ')}
+                  {domainLabel(d)}
                 </span>
               ))}
+              {uploads.length > 0 && (
+                <span className="chip upload-domain" title="Session-scoped, purged when this chat is deleted">
+                  + uploaded doc{uploads.length > 1 ? 's' : ''}
+                </span>
+              )}
             </div>
           </div>
         </header>
@@ -344,15 +418,17 @@ export default function App() {
               <h2>One query, any format</h2>
               <p>
                 Prism reasons across HR, Finance, Customer Support, Privacy, and Legal — then re-renders the same
-                answer as prose, JSON, XML, Excel, or a draft email.
+                answer as prose, JSON, XML, Excel, or a draft email. Drop a file to add a session-only sixth domain.
               </p>
               <div className="suggestions">
                 {SUGGESTIONS.map((s) => (
-                  <button key={s} type="button" className="suggestion" onClick={() => void sendMessage(s)}>
-                    {s}
+                  <button key={s.text} type="button" className="suggestion" onClick={() => void sendMessage(s.text)}>
+                    <span className="suggestion-domain">{s.domain.replaceAll('_', ' ')}</span>
+                    {s.text}
                   </button>
                 ))}
               </div>
+              <p className="suggestion-hint">{SUGGESTION_HINT}</p>
             </div>
           ) : (
             messages.map((m) => (
@@ -368,10 +444,22 @@ export default function App() {
                   .join(' ')}
               >
                 <AnswerStateBanner m={m} />
-                {m.content}
+                {m.sustainabilityNote
+                  ? m.content.replace(m.sustainabilityNote, '').trim()
+                  : m.content}
+                {m.sustainabilityNote && (
+                  <div className="water-callout" role="note">
+                    <strong>Water conservation</strong>
+                    {m.sustainabilityNote}
+                  </div>
+                )}
                 {m.role === 'assistant' && (
                   <div className="meta-row">
-                    {m.domain && <span className="chip active">{m.domain.replaceAll('_', ' ')}</span>}
+                    {m.domain && (
+                      <span className={`chip active${m.domain === 'uploaded' ? ' upload-domain' : ''}`}>
+                        {domainLabel(m.domain)}
+                      </span>
+                    )}
                     {m.confidence && (
                       <span className={`chip conf ${confidenceTone(m.confidence)}`}>
                         {m.confidence} confidence
@@ -413,17 +501,52 @@ export default function App() {
           <div ref={bottomRef} />
         </section>
 
-        <div className="composer-shell">
-          <div className="format-bar">
+        <div
+          className={`composer-shell${dragOver ? ' drag-over' : ''}`}
+          onDragOver={(e) => {
+            e.preventDefault()
+            if (!dragOver) setDragOver(true)
+          }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault()
+            setDragOver(false)
+            void attachFiles(e.dataTransfer.files)
+          }}
+        >
+          {uploads.length > 0 && (
+            <div className="upload-row" aria-label="Attached documents">
+              {uploads.map((u) => (
+                <span key={u.id} className="upload-chip" title={`${u.chunk_count ?? 0} chunks · ${formatBytes(u.bytes_size)}`}>
+                  <span className="upload-icon" aria-hidden>
+                    ▤
+                  </span>
+                  <span className="upload-name">{u.filename}</span>
+                  <span className="upload-state">active</span>
+                  <button
+                    type="button"
+                    className="upload-remove"
+                    aria-label={`Remove ${u.filename}`}
+                    title="Remove and purge"
+                    onClick={() => void removeUpload(u.id)}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+              <span className="upload-note">Local only · purged with this chat</span>
+            </div>
+          )}
+          <div className="format-bar" role="toolbar" aria-label="Re-render last answer">
             {FORMATS.map((fmt) => (
               <button
-                key={fmt}
+                key={fmt.id}
                 type="button"
-                className="format-btn"
-                disabled={busy || messages.length === 0 || !formats.includes(fmt)}
-                onClick={() => void onFormat(fmt)}
+                className={`format-btn format-${fmt.id}`}
+                disabled={busy || messages.length === 0 || !formats.includes(fmt.id)}
+                onClick={() => void onFormat(fmt.id)}
               >
-                {fmt}
+                {fmt.label}
               </button>
             ))}
           </div>
@@ -434,9 +557,31 @@ export default function App() {
               void sendMessage(draft)
             }}
           >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={UPLOAD_ACCEPT}
+              multiple
+              hidden
+              onChange={(e) => void attachFiles(e.target.files)}
+            />
+            <button
+              type="button"
+              className="attach"
+              title="Attach a document (PDF, DOCX, TXT, MD, CSV) — indexed locally for this chat only"
+              aria-label="Attach document"
+              disabled={busy || uploading || !activeId}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? '…' : '+'}
+            </button>
             <textarea
               value={draft}
-              placeholder="Ask about leave policy, expense approvals, toilet troubleshooting, privacy, warranties…"
+              placeholder={
+                uploads.length
+                  ? 'Ask about the attached document — or anything across the five domains…'
+                  : 'Ask about leave policy, expense approvals, toilet troubleshooting, privacy, warranties… or drop a file'
+              }
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {

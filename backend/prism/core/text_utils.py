@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 DUP_WORD_RE = re.compile(r"\b([A-Za-z0-9]+)(\s+\1\b)+", re.IGNORECASE)
 MODEL_NUM_RE = re.compile(r"\bK-\d{3,6}[A-Z0-9-]*\b", re.IGNORECASE)
 INR_AMOUNT_RE = re.compile(r"(?:₹|rs\.?\s*|inr\s*)\s*([\d,]+)", re.I)
 
 DOMAIN_KEYWORDS: dict[str, tuple[str, ...]] = {
-    "hr": ("leave", "resign", "notice period", "probation", "grievance", "maternity", "terminated", "separation"),
+    "hr": ("leave", "resign", "notice period", "probation", "grievance", "maternity", "terminated", "separation", "promot", "wfh", "work from home", "roll over", "carry forward"),
     "finance": ("expense", "reimburs", "invoice", "per diem", "budget", "purchase order", "₹", "rupee", "approval"),
     "customer_support": (
         "toilet",
@@ -220,10 +221,14 @@ def asks_for_fabricated_schema_fields(query: str) -> list[str]:
 
 
 def is_contractor_damage_query(query: str) -> bool:
+    """Installer/contractor damaged a Kohler product and the user wants warranty/liability."""
     q = query.lower()
-    return ("faucet" in q or "toilet" in q or "product" in q) and (
-        "contractor" in q or "damaged" in q or "liability" in q or "liable" in q
+    product = any(w in q for w in ("faucet", "toilet", "shower", "sink", "product"))
+    harm = any(w in q for w in ("damaged", "broke", "liable", "liability"))
+    actor_or_legal = any(
+        w in q for w in ("contractor", "install", "liable", "liability", "compliance", "warranty")
     )
+    return product and harm and actor_or_legal
 
 
 # Pure reformat of the previous answer — NOT "draft an email summarizing earlier fact X".
@@ -297,6 +302,39 @@ def detect_output_constraint(message: str) -> str | None:
 
 def prefers_email_draft(message: str) -> bool:
     return bool(re.search(r"\b(draft an email|write an email|email to my manager)\b", message, re.I))
+
+
+from pathlib import Path
+
+UPLOAD_POINTER_RE = re.compile(
+    r"\b("
+    r"this (document|file|pdf|docx|doc|attachment)|"
+    r"the (document|file|pdf|uploaded|attached)|"
+    r"uploaded (document|file|pdf)|"
+    r"attached (document|file|pdf)|"
+    r"according to (the|this) (document|file|pdf)|"
+    r"in (the|this) (document|file|pdf)|"
+    r"summarize (this|the) (document|file|pdf|attachment)|"
+    r"what does this (document|file|pdf) say"
+    r")\b",
+    re.I,
+)
+SUMMARIZE_UPLOAD_RE = re.compile(r"^\s*(summarize|summary|tldr|tl;dr|overview)\b", re.I)
+
+
+def query_points_at_uploads(query: str, filenames: list[str]) -> bool:
+    """True when the user is clearly asking about attached files, not the five KBs."""
+    q = (query or "").strip()
+    if not q:
+        return False
+    if UPLOAD_POINTER_RE.search(q) or SUMMARIZE_UPLOAD_RE.search(q):
+        return True
+    ql = q.lower()
+    for name in filenames:
+        stem = Path(name).stem.lower().strip()
+        if len(stem) >= 3 and stem in ql:
+            return True
+    return False
 
 
 VAGUE_NEW_SESSION_PATTERNS: list[tuple[re.Pattern[str], list[str]]] = [

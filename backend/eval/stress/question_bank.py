@@ -250,8 +250,22 @@ def build_bank() -> list[dict]:
                             "contractor liability law; may decline or caveats the liability/compliance "
                             "reporting part honestly."
                         ),
-                        "contains_any": ["warranty", "assist", "support", "liability", "cannot", "not legal advice", "recommend", "damage"],
-                        "not_contains_any": ["bathroom design service", "$699", "$299", "mood board"],
+                        "contains_all": ["warranty", "liability"],
+                        "contains_any": [
+                            "not legal advice",
+                            "cannot",
+                            "assist",
+                            "exclusions",
+                            "lifetime limited",
+                        ],
+                        "not_contains_any": [
+                            "bathroom design service",
+                            "$699",
+                            "$299",
+                            "mood board",
+                            "enameled cast iron sink care",
+                            "dish mats",
+                        ],
                     },
                 }
             ],

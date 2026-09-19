@@ -48,6 +48,17 @@ class PendingClarification(BaseModel):
     candidate_domains: list[str]
 
 
+class UploadedDocRef(BaseModel):
+    id: str
+    filename: str
+    content_type: str = ""
+    bytes_size: int = 0
+    chunk_count: int = 0
+    # len(session.turns) at upload time — drives the "recently attached" bias.
+    turn_index: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 class SessionState(BaseModel):
     session_id: str
     title: str | None = None
@@ -56,6 +67,7 @@ class SessionState(BaseModel):
     last_docs: list[SourceDocRef] = Field(default_factory=list)
     last_answer: CanonicalAnswer | None = None
     pending_clarification: PendingClarification | None = None
+    uploaded_docs: list[UploadedDocRef] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -195,6 +207,12 @@ class SessionStore:
             except Exception:
                 self._conn.execute("ROLLBACK")
                 raise
+        try:
+            from prism.core.uploads import get_upload_store
+
+            get_upload_store().delete_session(session_id)
+        except Exception:
+            pass
 
 
 _store_singleton: SessionStore | None = None

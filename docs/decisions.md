@@ -214,3 +214,69 @@ installable on Windows without extra system setup. `xhtml2pdf` is pure
 Python (ReportLab-based) and renders the Markdown→HTML→PDF pipeline needed
 for the synthetic HR/Finance documents (and later, the prompts-documentation
 and deck PDFs) without any native dependency risk on the target machine.
+
+## 10. Session-scoped document uploads: separate collection, ephemeral by design
+
+The brief asks for "internal *and external* query domain areas". The five
+permanent knowledge bases cover the internal/external split at the corpus
+level; uploads extend it to the *user's own* document — a vendor contract, a
+client's policy, a spec sheet — as a sixth, temporary domain (`uploaded`).
+
+**Storage: a second Chroma collection (`prism_uploads`) in the same
+`PersistentClient`, not rows in `prism_kb`.** Same embedder, same RRF fusion,
+same `RetrievedChunk` type, so no new retrieval machinery — but the five KBs
+can never see upload vectors, and `store.count()` / health / eval numbers stay
+about the curated corpus only. Every chunk carries `session_id` + `doc_id`
+metadata and retrieval always filters on `session_id`, so one user's upload
+cannot leak into another session. A per-session BM25 index is built lazily on
+first query and dropped on any add/delete.
+
+**Confidence is dense-only plus a comparative check against the KBs**, not
+`confidence_from_hits`. The KB's lexical shortcut ("top-3 BM25 rank is
+meaningful") assumes ~500 chunks; on a 4-chunk upload every query is a top-3
+hit, so an unrelated toilet question would look "confident" against a travel
+policy. An absolute floor alone is not enough either — calibrated on
+`nomic-embed-text`, "how many casual leave days can I carry forward?" scores
+0.38 against a travel-policy upload while a genuinely related "is alcohol
+reimbursable?" scores 0.39. What separates them is the KB's own best
+distance (0.23 vs 0.38): unrelated questions score far *better* against the
+permanent KBs. So an implicit question routes to the upload only when its
+upload distance is within `UPLOAD_KB_MARGIN` (0.06) of the KB's best.
+Explicit pointers ("this document", the filename) bypass the gate, so recall
+on the user's own file is never sacrificed to it. Right after an upload
+(`UPLOAD_RECENT_TURNS`) the floor is looser — a user who just attached a
+file is usually asking about it.
+
+**Ephemeral, and framed as a privacy feature rather than a limitation.**
+Vectors and the stored file are deleted on session delete, on explicit
+remove, and by a TTL sweep (`UPLOAD_TTL_HOURS`, default 24h) at API startup.
+Nothing is sent anywhere — parsing, chunking, embedding, and generation all
+run locally through Ollama. That is a defensible difference from cloud RAG
+tools and is stated out loud in the deck, not buried in the code.
+
+**Chunking reuses the KB philosophy with a tighter budget** — heading
+boundaries first (`chunk_markdown`), then token packing (`split_if_too_long`)
+at `UPLOAD_CHUNK_TOKENS` = 450 instead of 1500. Ad-hoc docs are read once, so
+smaller passages retrieve better and keep the prompt short on 8GB VRAM. PDF
+via `pypdf`, DOCX via `python-docx` (paragraphs + tables), HTML via
+BeautifulSoup, plain text/markdown/CSV/JSON as-is.
+
+## 11. Anaphora follow-ups: one extra "focus" retrieval, not a rewrite
+
+`switch_02` ("My toilet is leaking…" → "actually is that covered under
+warranty" → "can I get a refund instead") exposed a structural weakness: on
+anaphora turns the retrieval query is eight turns of context plus the
+follow-up, so the pivot word is drowned by the previous topic's chunks and the
+answer was only ever right when the LLM improvised. The fix is additive: when
+the query was anaphora-expanded, run one extra `top_k=3` retrieval on the raw
+follow-up alone (same domain filter), merge, and guarantee the top focus hit
+## 12. Water-waste estimator is code, not a prompt
+
+Kohler's 10% rubric line is water conservation. The same reason we do leave
+and ₹-band math in `policy_math.py` applies here: published EPA figures
+(WaterSense 3,000 gal/year drip; Fix-a-Leak ~200 gal/day running toilet)
+should not be left for the 7B model to approximate. `water_math.py` matches
+leak/drip/running-toilet Customer Support answers and fills
+`CanonicalAnswer.sustainability_note`. The LLM never sees or writes that
+string; the prose renderer and UI callout display it labeled as an estimate.
+

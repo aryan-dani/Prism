@@ -17,7 +17,8 @@ Built for the Kohler-MITWPU AI Research Lab case study challenge (individual sub
 | **Clarification-seeking** | Asks a short question when domain routing is ambiguous — doesn’t guess |
 | **Honest no-answer** | Refuses to fabricate when retrieval isn’t confident (stricter for Legal/Privacy) |
 | **Dynamic output formats** | One canonical answer object → prose / JSON / XML / Excel / email without re-retrieval |
-| **Local-first** | Ollama + embedded Chroma; no cloud LLM, no separate vector DB server |
+| **Bring your own document** | Drop a PDF / DOCX / TXT / CSV into the chat → indexed locally as a session-scoped sixth domain, answerable immediately alongside the five KBs; purged when the chat is deleted (24h TTL) |
+| **Local-first** | Ollama + embedded Chroma; no cloud LLM, no separate vector DB server — uploaded documents never leave the machine |
 
 **Architecture map:** [`docs/architecture.md`](docs/architecture.md) — system diagram, five knowledge bases (sources + ingest), turn pipeline, module index, improvement roadmap.  
 **Decision log:** [`docs/decisions.md`](docs/decisions.md) · **Prompts / workflows:** [`docs/prompts.md`](docs/prompts.md)
@@ -89,7 +90,7 @@ Or manually in separate terminals:
 - **Backend API**: `cd backend; uv run uvicorn prism.api.main:app --reload --port 8000`
 - **Frontend UI**: `cd frontend; npm run dev`
 
-Open **http://localhost:5173**
+Open **http://localhost:5173** (landing page → **Try the live demo**). Demo upload file: `backend/eval/fixtures/orion_travel_policy.md`.
 
 API docs: http://127.0.0.1:8000/docs · Health: http://127.0.0.1:8000/api/health
 
@@ -137,6 +138,14 @@ Routing-only eval (40 questions): **92.1%** domain accuracy · **100%** hit@5 ·
 | **Finance** | Synthetic — Meridian Fixtures Finance Policy | Disclosed; deliberate ₹ approval bands for exactness demos |
 
 HR/Finance are synthetic because no real internal Kohler manuals are public. That split is intentional and documented — not “whatever was easiest.”
+
+### Known limitations
+
+- Expense **approval bands are by claim amount, not grade**. “If I get promoted, what’s my new expense limit?” is still the same ₹5k / ₹25k / ₹1L table unless the user also states a rupee amount.
+- **Anaphora + topic pivot** (“…is that under warranty?” after a leak fix) is improved by a follow-up retrieval pass, but the 7B model can still linger on the previous troubleshooting steps on a slow/hot GPU.
+- **Upload vs KB**: implicit questions only go to an attached file when the file is a closer dense match than the five KBs. Say “this document…” (or the filename) to force the upload path.
+- **Latency** on a 20-turn session can climb when VRAM is already full (Cursor + three Ollama models). Demo on a quiet GPU.
+- Customer Support / Privacy / Legal are **public Kohler pages**, not internal ticketing or employee PII stores.
 
 ---
 

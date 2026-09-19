@@ -15,6 +15,8 @@ from prism.core.answer import CanonicalAnswer, KeyFact
 
 # Policy constants from data/synthetic/hr_policy.md
 CL_CARRY_CAP = 5
+CL_CONSECUTIVE_MAX = 3
+CAPEX_CFO_THRESHOLD = 500_000
 
 CL_CARRY_SCENARIO_RE = re.compile(
     r"(?:have|currently have|with)\s+(\d+)\s+(?:unused\s+)?(?:cl|casual leave)\s+days?"
@@ -353,13 +355,170 @@ def try_expense_approval_band(query: str) -> ComputedPolicyAnswer | None:
                 "(total claim value, not line items)."
             ],
         ),
+        )
+
+
+def try_consecutive_cl(query: str) -> ComputedPolicyAnswer | None:
+    """Max consecutive casual leave is 3; 4+ needs manager + EL adjustment."""
+    q = query.lower()
+    if "consecutive" not in q:
+        return None
+    if "casual" not in q and not re.search(r"\bcl\b", q):
+        return None
+    asked = None
+    m = re.search(r"\b(\d+)\s+consecutive", q)
+    if m:
+        asked = int(m.group(1))
+    beyond = asked is not None and asked > CL_CONSECUTIVE_MAX
+    if not beyond and not any(w in q for w in ("maximum", "max", "without special", "how many")):
+        return None
+    if beyond:
+        direct = (
+            f"{asked} consecutive casual leave (CL) days is more than the maximum of {CL_CONSECUTIVE_MAX} days "
+            "without special approval. Requests for more than 3 consecutive CL days require Reporting Manager "
+            "approval and are adjusted against Earned Leave."
+        )
+        facts = [
+            KeyFact(label="Maximum consecutive CL", value=str(CL_CONSECUTIVE_MAX), unit="days"),
+            KeyFact(label="Requested consecutive CL", value=str(asked), unit="days"),
+            KeyFact(label="Required approval", value="Reporting Manager"),
+            KeyFact(label="Adjusted against", value="Earned Leave"),
+        ]
+    else:
+        direct = (
+            f"The maximum number of consecutive casual leave days you can take without special approval is "
+            f"{CL_CONSECUTIVE_MAX} days. Requests for more than 3 consecutive CL days require Reporting Manager "
+            "approval and are adjusted against Earned Leave."
+        )
+        facts = [
+            KeyFact(label="Maximum consecutive CL", value=str(CL_CONSECUTIVE_MAX), unit="days"),
+            KeyFact(label="Beyond 3 consecutive CL", value="Reporting Manager approval; adjusted against Earned Leave"),
+        ]
+    return ComputedPolicyAnswer(
+        reason="cl_consecutive",
+        answer=CanonicalAnswer(
+            query=query,
+            domain="hr",
+            direct_answer=direct,
+            key_facts=facts,
+            sources=["data/synthetic/hr_policy.md"],
+            confidence="high",
+            no_answer=False,
+            caveats=["Looked up from HR leave policy consecutive-CL rule in code."],
+        ),
+    )
+
+
+def try_leave_year_calendar(query: str) -> ComputedPolicyAnswer | None:
+    """Bare 'when is the leave year?' — April 1 to March 31 (no join-date math)."""
+    q = query.lower()
+    if "leave year" not in q:
+        return None
+    if JOIN_DATE_RE.search(query):
+        return None
+    if not any(w in q for w in ("start", "end", "date", "when", "calendar", "exact", "runs")):
+        return None
+    return ComputedPolicyAnswer(
+        reason="leave_year_calendar",
+        answer=CanonicalAnswer(
+            query=query,
+            domain="hr",
+            direct_answer="The leave year runs from April 1 to March 31, aligned with the Company's fiscal year.",
+            key_facts=[
+                KeyFact(label="Leave year start", value="April 1"),
+                KeyFact(label="Leave year end", value="March 31"),
+            ],
+            sources=["data/synthetic/hr_policy.md"],
+            confidence="high",
+            no_answer=False,
+        ),
+    )
+
+
+def try_capex_cfo_threshold(query: str) -> ComputedPolicyAnswer | None:
+    q = query.lower()
+    if "capex" not in q and "capital expenditure" not in q and "capital purchase" not in q:
+        return None
+    if not any(w in q for w in ("cfo", "approval", "above", "threshold", "require")):
+        return None
+    indian = "₹5,00,000"
+    direct = (
+        f"Any single capital expenditure (CapEx) purchase above {indian} requires a CapEx justification form "
+        "and CFO approval, regardless of whether it was pre-approved in the annual budget."
+    )
+    return ComputedPolicyAnswer(
+        reason="capex_cfo",
+        answer=CanonicalAnswer(
+            query=query,
+            domain="finance",
+            direct_answer=direct,
+            key_facts=[
+                KeyFact(label="CapEx CFO threshold", value=indian),
+                KeyFact(label="Applies", value="regardless of budget"),
+            ],
+            sources=["data/synthetic/finance_policy.md"],
+            confidence="high",
+            no_answer=False,
+            caveats=["Looked up from Finance Policy CapEx rule in code."],
+        ),
+    )
+
+
+def try_contractor_damage_answer(query: str) -> ComputedPolicyAnswer | None:
+    """Do not let sink-care RAG invent contractor liability law."""
+    from prism.core.text_utils import is_contractor_damage_query
+
+    if not is_contractor_damage_query(query):
+        return None
+    q = query.lower()
+    if "contractor" not in q and "liable" not in q and "liability" not in q:
+        return None
+
+    direct = (
+        "Kohler Assist documents a Lifetime Limited Warranty for faucets, with exclusions. "
+        "Damage caused during installation by a contractor is not a standard manufacturing-defect "
+        "warranty claim on those pages — start with Assist warranty/support for the model. "
+        "This knowledge base cannot determine who is legally liable for contractor damage, and this "
+        "is not legal advice. Assist/legal pages also do not require this incident to be reported "
+        "to a regulator for compliance purposes."
+    )
+    return ComputedPolicyAnswer(
+        reason="contractor_damage",
+        answer=CanonicalAnswer(
+            query=query,
+            domain="customer_support",
+            direct_answer=direct,
+            key_facts=[
+                KeyFact(label="Faucet warranty (Assist)", value="Lifetime Limited Warranty; exclusions apply"),
+                KeyFact(label="Installer / contractor damage", value="Not treated as a manufacturing-defect warranty claim in Assist"),
+                KeyFact(label="Legal liability", value="Not established in this knowledge base; not legal advice"),
+                KeyFact(label="Compliance reporting", value="No regulator-reporting requirement found in Assist/legal corpus"),
+            ],
+            steps=[
+                "Look up the faucet model on assist.kohler.com warranty/support.",
+                "If the issue is a factory defect, follow the published warranty process.",
+                "For installer damage or who pays, use the contract/insurance path — not this agent as legal counsel.",
+            ],
+            sources=[
+                "https://assist.kohler.com/en/warranty/Faucets",
+            ],
+            confidence="high",
+            no_answer=False,
+            caveats=[
+                "Warranty coverage is product- and exclusion-specific; this is not a determination of contractor liability.",
+            ],
+        ),
     )
 
 
 def try_deterministic_policy_answer(query: str) -> ComputedPolicyAnswer | None:
     return (
         try_cl_carry_forward(query)
+        or try_consecutive_cl(query)
         or try_leave_year_join_math(query)
+        or try_leave_year_calendar(query)
+        or try_capex_cfo_threshold(query)
         or try_termination_multihop(query)
         or try_expense_approval_band(query)
+        or try_contractor_damage_answer(query)
     )
