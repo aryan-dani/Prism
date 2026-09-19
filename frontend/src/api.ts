@@ -1,5 +1,52 @@
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 
+const TOKEN_KEY = 'prism_auth_token'
+const USER_KEY = 'prism_auth_user'
+
+export type AuthUser = {
+  email: string
+  name: string
+  role: string
+  domains?: string[]
+}
+
+export type DemoUsersResponse = {
+  password: string
+  users: Array<{ email: string; name: string; role: string }>
+}
+
+export function getStoredToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function getStoredUser(): AuthUser | null {
+  const raw = localStorage.getItem(USER_KEY)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as AuthUser
+  } catch {
+    return null
+  }
+}
+
+export function clearAuth() {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(USER_KEY)
+}
+
+function storeAuth(token: string, user: AuthUser) {
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(USER_KEY, JSON.stringify(user))
+}
+
+function authHeaders(extra?: HeadersInit): HeadersInit {
+  const token = getStoredToken()
+  return {
+    ...(extra ?? {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+}
+
 export type SessionSummary = {
   id: string
   title: string | null
@@ -19,6 +66,8 @@ export type ChatResponse = {
   available_formats: string[]
   title: string | null
   sustainability_note?: string | null
+  workflow?: string | null
+  prompt_doc?: string | null
 }
 
 export type Health = {
@@ -44,16 +93,76 @@ export type Health = {
   }
 }
 
+export class AuthError extends Error {
+  constructor(message = 'Authentication required') {
+    super(message)
+    this.name = 'AuthError'
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-    ...init,
+  const headers = authHeaders({
+    'Content-Type': 'application/json',
+    ...(init?.headers ?? {}),
   })
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers,
+  })
+  if (res.status === 401) {
+    clearAuth()
+    throw new AuthError()
+  }
   if (!res.ok) {
     const text = await res.text()
     throw new Error(text || res.statusText)
   }
   return res.json() as Promise<T>
+}
+
+export async function login(email: string, password: string) {
+  const res = await fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || 'Login failed')
+  }
+  const data = (await res.json()) as { token: string; email: string; name: string; role: string }
+  storeAuth(data.token, { email: data.email, name: data.name, role: data.role })
+  return data
+}
+
+export async function logout() {
+  try {
+    await request<{ ok: boolean }>('/api/auth/logout', { method: 'POST' })
+  } catch {
+    // ignore
+  }
+  clearAuth()
+}
+
+export function getMe() {
+  return request<AuthUser>('/api/auth/me')
+}
+
+export function getDemoUsers() {
+  return request<DemoUsersResponse>('/api/auth/demo-users')
+}
+
+export function getDenials() {
+  return request<{
+    denials: Array<{
+      ts: string
+      email: string
+      role: string
+      query: string
+      attempted_domain: string | null
+      reason: string
+    }>
+  }>('/api/auth/denials')
 }
 
 export function getHealth() {
@@ -116,7 +225,15 @@ export type UploadResponse = {
 export async function uploadDocument(sessionId: string, file: File): Promise<UploadResponse> {
   const body = new FormData()
   body.append('file', file, file.name)
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/upload`, { method: 'POST', body })
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/upload`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body,
+  })
+  if (res.status === 401) {
+    clearAuth()
+    throw new AuthError()
+  }
   if (!res.ok) {
     let detail = ''
     try {
@@ -164,9 +281,13 @@ export async function chatStream(
 ): Promise<ChatResponse> {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ message }),
   })
+  if (res.status === 401) {
+    clearAuth()
+    throw new AuthError()
+  }
   if (!res.ok) {
     throw new Error((await res.text()) || res.statusText)
   }
@@ -221,9 +342,13 @@ export async function chatStream(
 export async function renderFormat(sessionId: string, format: string) {
   const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/render`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ format }),
   })
+  if (res.status === 401) {
+    clearAuth()
+    throw new AuthError()
+  }
   if (!res.ok) throw new Error(await res.text())
   const type = res.headers.get('content-type') || ''
   if (type.includes('application/vnd.openxmlformats') || type.includes('octet-stream')) {
@@ -234,5 +359,20 @@ export async function renderFormat(sessionId: string, format: string) {
 }
 
 export function downloadExcelUrl(sessionId: string) {
+  const token = getStoredToken()
+  // Excel download via window.open cannot send Authorization header; use blob fetch instead.
+  void token
   return `${API_BASE}/api/sessions/${sessionId}/download/excel`
+}
+
+export async function downloadExcelBlob(sessionId: string): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/download/excel`, {
+    headers: authHeaders(),
+  })
+  if (res.status === 401) {
+    clearAuth()
+    throw new AuthError()
+  }
+  if (!res.ok) throw new Error(await res.text())
+  return res.blob()
 }

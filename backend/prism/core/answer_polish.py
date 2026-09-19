@@ -237,6 +237,50 @@ def polish_answer(
     return answer
 
 
+def apply_source_priority_caveat(answer: CanonicalAnswer, chunks: list) -> CanonicalAnswer:
+    """Prefer official PDF/DOCX over scraped HTML; footnote the secondary source.
+
+    A real user wants one confident answer with a disclosure, not two conflicting
+    manuals dumped side-by-side. Official PDFs (source_priority=100) beat Assist
+    HTML (10). We never silently drop the Assist citation.
+    """
+    if not chunks or answer.no_answer:
+        return answer
+    kinds = {(c.metadata or {}).get("source_kind") for c in chunks}
+    priorities = [int((c.metadata or {}).get("source_priority") or 10) for c in chunks]
+    has_pdf = "pdf" in kinds or "docx" in kinds or any(p >= 100 for p in priorities)
+    has_html = "html" in kinds or any(
+        str((c.metadata or {}).get("source_url") or "").startswith("http")
+        and int((c.metadata or {}).get("source_priority") or 10) <= 10
+        for c in chunks
+    )
+    # Warranty / legal conflict demo path
+    warrantyish = any(
+        "warranty" in str((c.metadata or {}).get("type") or "").lower()
+        or "warranty" in str((c.metadata or {}).get("title") or "").lower()
+        or "warranty" in str((c.metadata or {}).get("source_url") or "").lower()
+        for c in chunks
+    )
+    if has_pdf and has_html and warrantyish:
+        note = (
+            "A lower-priority Assist article differs; cited official PDF takes precedence. "
+            "Both sources are listed — treat the warranty PDF as the legal document and the "
+            "Assist article as how-to guidance."
+        )
+        if note not in answer.caveats:
+            answer.caveats = list(answer.caveats) + [note]
+        # Prefer PDF source_urls first in the citation list
+        pdf_urls = [
+            str((c.metadata or {}).get("source_url") or "")
+            for c in chunks
+            if (c.metadata or {}).get("source_kind") in ("pdf", "docx")
+            or int((c.metadata or {}).get("source_priority") or 0) >= 100
+        ]
+        pdf_urls = [u for u in pdf_urls if u]
+        answer.sources = list(dict.fromkeys([*pdf_urls, *answer.sources]))
+    return answer
+
+
 def _filter_sources_to_retrieved(sources: list[str], allowed: set[str]) -> list[str]:
     """Keep only citations that match a retrieved chunk's source_url (exact or suffix)."""
     if not sources:

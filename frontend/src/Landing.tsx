@@ -1,8 +1,11 @@
-import { SUGGESTION_HINT, SUGGESTIONS } from './suggestions'
+import { SUGGESTION_HINT, suggestionsForRole } from './suggestions'
+import type { AuthUser } from './api'
 
 type Props = {
+  user: AuthUser
   onEnter: () => void
   onTryQuestion: (text: string) => void
+  onLogout: () => void
 }
 
 const DOMAINS = [
@@ -21,14 +24,23 @@ const STEPS = [
   { n: '4', title: 'Render', body: 'Same answer as prose, JSON, XML, Excel, or a draft email.' },
 ]
 
-export default function Landing({ onEnter, onTryQuestion }: Props) {
+export default function Landing({ user, onEnter, onTryQuestion, onLogout }: Props) {
+  const suggestions = suggestionsForRole(user.role)
   return (
     <div className="landing">
       <header className="landing-bar">
         <div className="brand-mark">Prism</div>
-        <button type="button" className="landing-cta ghost" onClick={onEnter}>
-          Open chat
-        </button>
+        <div className="landing-bar-right">
+          <span className="role-badge" title={user.email}>
+            {user.name} · {user.role.replaceAll('_', ' ')}
+          </span>
+          <button type="button" className="landing-cta ghost" onClick={onLogout}>
+            Log out
+          </button>
+          <button type="button" className="landing-cta ghost" onClick={onEnter}>
+            Open chat
+          </button>
+        </div>
       </header>
 
       <section className="landing-hero">
@@ -36,13 +48,14 @@ export default function Landing({ onEnter, onTryQuestion }: Props) {
         <h1>One query, any format.</h1>
         <p className="landing-lead">
           A local conversational agent over HR, Finance, Customer Support, Privacy, and Legal — plus a
-          document you attach in this chat. Answers stay on the machine. Reformats never re-ask the model.
+          document you attach in this chat. Role-based login, cited sources, documented prompts, and
+          browser voice (mic + speak). Answers stay on the machine. Reformats never re-ask the model.
         </p>
         <div className="landing-actions">
           <button type="button" className="landing-cta" onClick={onEnter}>
             Try the live demo
           </button>
-          <span className="landing-meta">Runs on Ollama · 8GB VRAM · no cloud LLM</span>
+          <span className="landing-meta">Runs on Ollama · 8GB VRAM · voice in Chrome/Edge</span>
         </div>
       </section>
 
@@ -66,9 +79,9 @@ export default function Landing({ onEnter, onTryQuestion }: Props) {
       </section>
 
       <section className="landing-try">
-        <h2>Start with a question judges actually care about</h2>
+        <h2>Try it — a few questions that show what Prism can do</h2>
         <div className="suggestions landing-suggestions">
-          {SUGGESTIONS.map((s) => (
+          {suggestions.map((s) => (
             <button key={s.text} type="button" className="suggestion" onClick={() => onTryQuestion(s.text)}>
               <span className="suggestion-domain">{s.domain.replaceAll('_', ' ')}</span>
               {s.text}
@@ -77,6 +90,15 @@ export default function Landing({ onEnter, onTryQuestion }: Props) {
         </div>
         <p className="suggestion-hint">{SUGGESTION_HINT}</p>
       </section>
+
+      <footer className="landing-footer">
+        Built by Aryan Dani ·{' '}
+        <a href="https://www.aryandani.com" target="_blank" rel="noreferrer">
+          aryandani.com
+        </a>
+        {' · '}
+        Kohler-MITWPU AI Research Lab, Track 3
+      </footer>
     </div>
   )
 }

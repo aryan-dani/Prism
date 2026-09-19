@@ -30,6 +30,9 @@ REQUIRED_PROCESSED_FILES = (
     "legal_from_kohler.jsonl",
     "hr.jsonl",
     "finance.jsonl",
+    "hr_records.jsonl",
+    "finance_compensation.jsonl",
+    "legal_warranty_fixture.jsonl",
 )
 
 

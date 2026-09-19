@@ -21,26 +21,28 @@ Target hardware: ~8GB NVIDIA VRAM (developed on RTX 5070 Laptop).
 
 ```
 ┌─────────────────┐   HTTP :8000    ┌──────────────────────────────┐
-│  frontend/      │◄───────────────►│  backend/prism/api (FastAPI) │
-│  React + Vite   │                 └──────────────┬───────────────┘
+│  frontend/      │◄── Bearer ─────►│  backend/prism/api (FastAPI) │
+│  React + Vite   │   login/RBAC    └──────────────┬───────────────┘
 └─────────────────┘                                │
                                      ┌─────────────▼─────────────┐
                                      │  core/agent.py            │
                                      │  turn state machine       │
                                      └───┬──────────┬────────┬───┘
                      SessionStore        │          │        │
-                     SQLite              ▼          ▼        ▼
+                     + users/tokens      ▼          ▼        ▼
                      data/sessions.db   Router   Retriever  answer.py
                                         +anchors Chroma+BM25 Ollama gen
+                                                 role_* ACL
                                                  data/chroma/
 ```
 
 | Layer | Role | Path |
 |---|---|---|
-| UI | Sessions, chat, format bar, Excel download | `frontend/` |
-| API | Sync chat, render, download | `backend/prism/api/` |
+| UI | Sessions, chat, format bar, Excel download, login | `frontend/` |
+| API | Auth, sync chat, render, download | `backend/prism/api/` |
+| Auth / RBAC | bcrypt users, Bearer tokens, denial log | `backend/prism/core/auth.py`, `rbac.py` |
 | Agent | Ordered gates + RAG orchestration | `backend/prism/core/agent.py` |
-| Index | One collection `prism_kb` + BM25 sidecar | `backend/data/chroma/` |
+| Index | One collection `prism_kb` + BM25 sidecar + `role_*` ACL | `backend/data/chroma/` |
 | LLM | Gen / embed / titles | Ollama (`OLLAMA_HOST`) |
 
 ---

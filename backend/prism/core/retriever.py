@@ -1,10 +1,13 @@
 """Hybrid (dense + BM25) retrieval with reciprocal-rank fusion, domain
-scoping, and a relevance floor that powers the "no confident answer" honesty
-path (Piece 7 / 2b).
+scoping, role ACL, and a relevance floor that powers the "no confident
+answer" honesty path (Piece 7 / 2b).
 
-Confidence uses dense distance **or** strong lexical / dual-signal fused
+Confidence uses dense distance **or** strong BM25 / dual-signal fused
 scores so exact-token hits (₹ bands, model numbers) are not false-negatived
 when embeddings alone are weak.
+
+RBAC: every retrieve requires `role`. Chroma `where` ANDs `role_{role}=True`
+so forbidden chunks never reach the LLM (UI filtering is not the control).
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from prism.core.config import (
     STRICT_DOMAINS,
 )
 from prism.core.embeddings import embed_one
+from prism.core.rbac import chroma_where, normalize_role
 from prism.core.store import RetrievedChunk, get_store
 
 
@@ -50,15 +54,13 @@ def _rrf_fuse(dense: list[RetrievedChunk], sparse: list[RetrievedChunk], *, k: i
             by_id[c.id].sparse_rank = rank
         else:
             by_id[c.id] = c
+            by_id[c.id].sparse_rank = rank
         scores[c.id] = scores.get(c.id, 0.0) + 1.0 / (k + rank + 1)
 
-    ranked_ids = sorted(scores.keys(), key=lambda i: -scores[i])
-    fused = []
-    for i in ranked_ids:
-        chunk = by_id[i]
-        chunk.fused_score = scores[i]
-        fused.append(chunk)
-    return fused
+    for id_, chunk in by_id.items():
+        chunk.fused_score = scores[id_]
+
+    return sorted(by_id.values(), key=lambda c: -(c.fused_score or 0.0))
 
 
 def confidence_from_hits(
@@ -77,29 +79,41 @@ def confidence_from_hits(
     return dense_ok or lexical_ok or dual_ok
 
 
+def _sort_by_source_priority(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """Official PDF/DOCX (priority 100) before scraped HTML (10) for the LLM."""
+    return sorted(
+        chunks,
+        key=lambda c: (
+            -(int(c.metadata.get("source_priority") or 10)),
+            -(c.fused_score or 0.0),
+        ),
+    )
+
+
 def retrieve(
     query: str,
     *,
+    role: str,
     domain: str | None = None,
     top_k: int = RETRIEVAL_TOP_K,
     candidate_k: int = RETRIEVAL_CANDIDATE_K,
 ) -> RetrievalResult:
+    role = normalize_role(role)
     store = get_store()
     query_embedding = embed_one(query)
 
-    where = {f"domain_{domain}": True} if domain else None
+    where = chroma_where(role=role, domain=domain)
     dense_hits = store.dense_search(query_embedding, top_k=candidate_k, where=where)
 
-    allowed_ids = None
-    if domain:
-        allowed_ids = {c.id for c in dense_hits}  # sparse search scoped to the same domain-filtered set
-        # widen the allowed set slightly so BM25 can surface exact-token matches
-        # dense search alone might rank low -- fetch a broader domain id set.
-        allowed_ids |= _domain_ids(store, domain)
+    allowed_ids: set[str] | None = set(c.id for c in dense_hits)
+    allowed_ids |= _acl_ids(store, role=role, domain=domain)
 
     sparse_hits = store.sparse_search(query, top_k=candidate_k, allowed_ids=allowed_ids)
+    # Defense in depth: drop any sparse hit missing the role flag (legacy index).
+    role_key = f"role_{role}"
+    sparse_hits = [c for c in sparse_hits if c.metadata.get(role_key) is True or c.metadata.get(role_key) == True]
 
-    fused = _rrf_fuse(dense_hits, sparse_hits)[:top_k]
+    fused = _sort_by_source_priority(_rrf_fuse(dense_hits, sparse_hits)[:top_k])
 
     best_distance = None
     if dense_hits:
@@ -122,13 +136,19 @@ def retrieve(
     )
 
 
-_domain_id_cache: dict[str, set[str]] = {}
+_acl_id_cache: dict[tuple[str, str | None], set[str]] = {}
 
 
-def _domain_ids(store, domain: str) -> set[str]:
-    if domain in _domain_id_cache:
-        return _domain_id_cache[domain]
-    got = store._collection.get(where={f"domain_{domain}": True}, include=[])
-    ids = set(got.get("ids", []))
-    _domain_id_cache[domain] = ids
+def _acl_ids(store, *, role: str, domain: str | None) -> set[str]:
+    key = (role, domain)
+    if key in _acl_id_cache:
+        return _acl_id_cache[key]
+    where = chroma_where(role=role, domain=domain)
+    got = store._collection.get(where=where, include=[])
+    ids = set(got.get("ids") or [])
+    _acl_id_cache[key] = ids
     return ids
+
+
+def clear_acl_cache() -> None:
+    _acl_id_cache.clear()

@@ -27,6 +27,7 @@ dependencies = [
     "markdown2>=2.4",
     "xhtml2pdf>=0.2.16",
     "tiktoken>=0.7",
+    "bcrypt>=4.1",
 ]
 
 [project.optional-dependencies]

@@ -19,6 +19,7 @@ backend/data/chroma/
 backend/data/uploads/
 backend/data/sessions.db
 backend/data/sessions.db-*
+# Auth/session SQLite lives at sessions.db (users + tokens + denials); never commit
 *.log
 
 # Frontend (React / Vite)

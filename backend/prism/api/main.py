@@ -16,6 +16,13 @@ from prism.core.config import EMBED_MODEL, GEN_MODEL, TITLE_MODEL
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # Seed demo users / auth tables (idempotent).
+    try:
+        from prism.core.auth import ensure_auth_ready
+
+        ensure_auth_ready()
+    except Exception:
+        pass
     # Warm Ollama models so the first user turn does not pay a cold-load spike.
     try:
         from prism.core.ollama_client import warm_models

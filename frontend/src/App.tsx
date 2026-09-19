@@ -1,21 +1,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AuthError,
   chatStream,
   createSession,
   deleteSession,
   deleteUpload,
-  downloadExcelUrl,
+  downloadExcelBlob,
+  getDenials,
   getHealth,
   getSession,
   listSessions,
   renderFormat,
   uploadDocument,
+  type AuthUser,
   type ChatResponse,
   type Health,
   type SessionSummary,
   type UploadedDoc,
 } from './api'
-import { SUGGESTION_HINT, SUGGESTIONS } from './suggestions'
+import { SUGGESTION_HINT, suggestionsForRole } from './suggestions'
 import './index.css'
 
 type Message = {
@@ -29,6 +32,8 @@ type Message = {
   sources?: ChatResponse['sources']
   availableFormats?: string[]
   sustainabilityNote?: string | null
+  workflow?: string | null
+  promptDoc?: string | null
 }
 
 const FORMATS = [
@@ -40,6 +45,46 @@ const FORMATS = [
 ] as const
 
 const UPLOAD_ACCEPT = '.pdf,.txt,.md,.markdown,.csv,.json,.html,.htm,.docx'
+
+const WORKFLOW_LABELS: Record<string, string> = {
+  rag_canonical: 'RAG + system prompt',
+  rag_email: 'RAG → email render',
+  policy_math: 'Deterministic policy_math',
+  rbac_deny: 'RBAC denial',
+  jailbreak_refuse: 'Jailbreak refuse',
+  policy_override_refuse: 'Policy-override refuse',
+  reformat: 'Reformat last answer',
+  clarify: 'Clarification',
+  session_memory: 'Session memory',
+  session_email_recall: 'Session email recall',
+  upload_rag: 'Uploaded-doc RAG',
+}
+
+function workflowLabel(id?: string | null): string {
+  if (!id) return ''
+  return WORKFLOW_LABELS[id] ?? id.replaceAll('_', ' ')
+}
+
+/** Browser Web Speech (Chrome/Edge). Absent → voice controls stay hidden. */
+function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
+  const w = window as unknown as {
+    SpeechRecognition?: new () => SpeechRecognitionLike
+    webkitSpeechRecognition?: new () => SpeechRecognitionLike
+  }
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
+}
+
+type SpeechRecognitionLike = {
+  continuous: boolean
+  interimResults: boolean
+  lang: string
+  onresult: ((ev: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null
+  onerror: ((ev: { error?: string }) => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
+  abort: () => void
+}
 
 function uid() {
   return crypto.randomUUID()
@@ -129,10 +174,16 @@ function AnswerStateBanner({ m }: { m: Message }) {
 }
 
 export default function App({
+  user,
   onHome,
+  onLogout,
+  onAuthLost,
   seedQuestion,
 }: {
+  user: AuthUser
   onHome?: () => void
+  onLogout?: () => void
+  onAuthLost?: () => void
   seedQuestion?: string | null
 }) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
@@ -147,12 +198,50 @@ export default function App({
   const [uploads, setUploads] = useState<UploadedDoc[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
+  const [sessionQuery, setSessionQuery] = useState('')
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [denials, setDenials] = useState<
+    Array<{ ts: string; email: string; role: string; query: string; reason: string }>
+  >([])
+  const [listening, setListening] = useState(false)
+  const [speakingId, setSpeakingId] = useState<string | null>(null)
+  const [showAllSources, setShowAllSources] = useState<Record<string, boolean>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null)
+  const draftBaseRef = useRef('')
+
+  const speechSupported = useMemo(() => typeof window !== 'undefined' && !!getSpeechRecognitionCtor(), [])
+  const ttsSupported = useMemo(
+    () => typeof window !== 'undefined' && typeof window.speechSynthesis !== 'undefined',
+    [],
+  )
+
+  const roleDomains = useMemo(() => {
+    if (user.role === 'customer') return ['customer_support', 'privacy', 'legal']
+    return ['hr', 'finance', 'customer_support', 'privacy', 'legal']
+  }, [user.role])
+
+  const emptySuggestions = useMemo(() => suggestionsForRole(user.role), [user.role])
 
   const activeSession = useMemo(
     () => sessions.find((s) => s.id === activeId) ?? null,
     [sessions, activeId],
+  )
+
+  const filteredSessions = useMemo(() => {
+    const q = sessionQuery.trim().toLowerCase()
+    if (!q) return sessions
+    return sessions.filter((s) => {
+      const title = displayTitle(s.title).toLowerCase()
+      const domain = domainLabel(s.active_domain).toLowerCase()
+      return title.includes(q) || domain.includes(q) || s.id.toLowerCase().includes(q)
+    })
+  }, [sessions, sessionQuery])
+
+  const shortcutMod = useMemo(
+    () => (typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform) ? '⌘' : 'Ctrl'),
+    [],
   )
 
   useEffect(() => {
@@ -167,17 +256,56 @@ export default function App({
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, panel])
 
+  useEffect(() => {
+    return () => {
+      try {
+        recognitionRef.current?.abort()
+      } catch {
+        /* ignore */
+      }
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        window.speechSynthesis.cancel()
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'k') return
+      const target = e.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        // Still allow Ctrl/Cmd+K from composer — it's the new-chat shortcut.
+      }
+      e.preventDefault()
+      void startNewChat()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   async function bootstrap() {
     try {
       const [h, list] = await Promise.all([getHealth(), listSessions()])
       setHealth(h)
       setSessions(list)
+      if (user.role === 'hr_staff' || user.role === 'finance_staff') {
+        try {
+          const d = await getDenials()
+          setDenials(d.denials.slice(0, 8))
+        } catch {
+          setDenials([])
+        }
+      }
       if (list.length) {
         await loadSession(list[0].id, list)
       } else {
         await startNewChat(false)
       }
     } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthLost?.()
+        return
+      }
       setStatus(`API offline — start backend: uv run uvicorn prism.api.main:app --port 8000`)
       console.error(err)
     }
@@ -299,18 +427,25 @@ export default function App({
           sources: res.sources,
           availableFormats: res.available_formats,
           sustainabilityNote: res.sustainability_note ?? null,
+          workflow: res.workflow ?? null,
+          promptDoc: res.prompt_doc ?? 'docs/prompts.md',
         },
       ])
       setFormats(res.available_formats.length ? res.available_formats : ['prose'])
       await refreshSessions()
+      const wf = workflowLabel(res.workflow)
       setStatus(
         res.is_clarification
           ? 'Waiting for clarification'
           : res.no_answer
-            ? `No confident answer · ${domainLabel(res.domain) || 'general'}`
-            : `Answered · ${domainLabel(res.domain) || 'general'} · ${res.confidence ?? 'n/a'} confidence`,
+            ? `No confident answer · ${domainLabel(res.domain) || 'general'}${wf ? ` · ${wf}` : ''}`
+            : `Answered · ${domainLabel(res.domain) || 'general'} · ${res.confidence ?? 'n/a'} confidence${wf ? ` · ${wf}` : ''}`,
       )
     } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthLost?.()
+        return
+      }
       setStatus(err instanceof Error ? err.message : 'Chat failed')
     } finally {
       setBusy(false)
@@ -320,7 +455,19 @@ export default function App({
   async function onFormat(format: string) {
     if (!activeId || busy) return
     if (format === 'excel') {
-      window.open(downloadExcelUrl(activeId), '_blank')
+      try {
+        const blob = await downloadExcelBlob(activeId)
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = 'prism_answer.xlsx'
+        a.click()
+        URL.revokeObjectURL(url)
+        setStatus('Downloaded Excel')
+      } catch (err) {
+        if (err instanceof AuthError) onAuthLost?.()
+        else setStatus(err instanceof Error ? err.message : 'Excel download failed')
+      }
       return
     }
     setBusy(true)
@@ -345,6 +492,95 @@ export default function App({
     }
   }
 
+  async function copyAnswer(m: Message) {
+    const text = m.sustainabilityNote
+      ? `${m.content.replace(m.sustainabilityNote, '').trim()}\n\n${m.sustainabilityNote}`.trim()
+      : m.content
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedId(m.id)
+      setStatus('Answer copied')
+      window.setTimeout(() => setCopiedId((id) => (id === m.id ? null : id)), 1600)
+    } catch {
+      setStatus('Copy failed — clipboard permission denied')
+    }
+  }
+
+  function stopSpeaking() {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel()
+    }
+    setSpeakingId(null)
+  }
+
+  function speakAnswer(m: Message) {
+    if (!ttsSupported) {
+      setStatus('Text-to-speech not supported in this browser — try Chrome or Edge')
+      return
+    }
+    if (speakingId === m.id) {
+      stopSpeaking()
+      return
+    }
+    stopSpeaking()
+    const text = m.content.replace(/\s+/g, ' ').trim()
+    if (!text) return
+    const utter = new SpeechSynthesisUtterance(text)
+    utter.rate = 1
+    utter.onend = () => setSpeakingId((id) => (id === m.id ? null : id))
+    utter.onerror = () => setSpeakingId(null)
+    setSpeakingId(m.id)
+    window.speechSynthesis.speak(utter)
+  }
+
+  function toggleMic() {
+    const Ctor = getSpeechRecognitionCtor()
+    if (!Ctor) {
+      setStatus('Voice input not supported here — use Chrome or Edge')
+      return
+    }
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop()
+      setListening(false)
+      return
+    }
+    draftBaseRef.current = draft.trim()
+    const rec = new Ctor()
+    recognitionRef.current = rec
+    rec.continuous = true
+    rec.interimResults = true
+    rec.lang = 'en-IN'
+    rec.onresult = (ev) => {
+      let finalChunk = ''
+      let interim = ''
+      for (let i = 0; i < ev.results.length; i++) {
+        const piece = ev.results[i][0].transcript
+        if (ev.results[i].isFinal) finalChunk += piece
+        else interim += piece
+      }
+      const base = draftBaseRef.current
+      const combined = [base, finalChunk, interim].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+      setDraft(combined)
+      if (finalChunk) {
+        draftBaseRef.current = [base, finalChunk].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+      }
+    }
+    rec.onerror = (ev) => {
+      setListening(false)
+      if (ev.error === 'not-allowed') setStatus('Microphone permission denied')
+      else if (ev.error !== 'aborted') setStatus(`Voice input error: ${ev.error ?? 'unknown'}`)
+    }
+    rec.onend = () => setListening(false)
+    try {
+      rec.start()
+      setListening(true)
+      setStatus('Listening… speak your question, then stop the mic or press Send')
+    } catch {
+      setStatus('Could not start microphone')
+      setListening(false)
+    }
+  }
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -353,44 +589,88 @@ export default function App({
             <div className="brand-mark">Prism</div>
             <div className="brand-sub">Kohler unified enterprise AI · local Ollama</div>
           </button>
+          <div className="user-chip">
+            <span className="role-badge">
+              {user.name} · {user.role.replaceAll('_', ' ')}
+            </span>
+            <button type="button" className="logout-btn" onClick={onLogout}>
+              Log out
+            </button>
+          </div>
         </div>
         <button className="new-chat" type="button" onClick={() => void startNewChat()}>
           New conversation
+          <span className="new-chat-hint">{shortcutMod}+K</span>
         </button>
+        <input
+          className="session-search"
+          type="search"
+          value={sessionQuery}
+          placeholder="Search sessions…"
+          aria-label="Search sessions"
+          onChange={(e) => setSessionQuery(e.target.value)}
+        />
         <div className="session-list">
-          {sessions.map((s) => (
-            <div key={s.id} className="session-row">
-              <button
-                type="button"
-                className={`session-item ${s.id === activeId ? 'active' : ''}`}
-                onClick={() => void selectSession(s.id)}
-              >
-                <div className="session-title">{displayTitle(s.title)}</div>
-                <div className="session-meta">{domainLabel(s.active_domain) || 'no domain yet'}</div>
-              </button>
-              <button
-                type="button"
-                className="session-delete"
-                aria-label="Delete session"
-                title="Delete"
-                onClick={() => void removeSession(s.id)}
-              >
-                ×
-              </button>
+          {filteredSessions.length === 0 ? (
+            <div className="session-empty">
+              {sessions.length === 0 ? 'No conversations yet' : 'No sessions match that search'}
             </div>
-          ))}
+          ) : (
+            filteredSessions.map((s) => (
+              <div key={s.id} className="session-row">
+                <button
+                  type="button"
+                  className={`session-item ${s.id === activeId ? 'active' : ''}`}
+                  onClick={() => void selectSession(s.id)}
+                >
+                  <div className="session-title">{displayTitle(s.title)}</div>
+                  <div className="session-meta">{domainLabel(s.active_domain) || 'no domain yet'}</div>
+                </button>
+                <button
+                  type="button"
+                  className="session-delete"
+                  aria-label="Delete session"
+                  title="Delete"
+                  onClick={() => void removeSession(s.id)}
+                >
+                  ×
+                </button>
+              </div>
+            ))
+          )}
         </div>
-        {health && (
-          <div className="sidebar-foot">
-            <div>
-              {health.chunks_indexed} chunks · {health.gen_model}
-            </div>
-            <div className={`health-pill ${health.status === 'ok' ? 'ok' : 'degraded'}`}>
-              API {health.status}
-              {health.ollama && !health.ollama.ok ? ' · Ollama incomplete' : ''}
-            </div>
+        <div className="sidebar-foot">
+          {health && (
+            <>
+              <div>
+                {health.chunks_indexed} chunks · {health.gen_model}
+              </div>
+              <div className={`health-pill ${health.status === 'ok' ? 'ok' : 'degraded'}`}>
+                API {health.status}
+                {health.ollama && !health.ollama.ok ? ' · Ollama incomplete' : ''}
+              </div>
+            </>
+          )}
+          <div className="sidebar-credit">
+            Built by Aryan Dani ·{' '}
+            <a href="https://www.aryandani.com" target="_blank" rel="noreferrer">
+              aryandani.com
+            </a>
           </div>
-        )}
+          {denials.length > 0 && (
+            <div className="denials-box" title="RBAC denials log (staff only)">
+              <strong>Recent denials</strong>
+              {denials.slice(0, 5).map((d, i) => (
+                <div key={`${d.ts}-${i}`} className="denial-row">
+                  <span className="denial-meta">
+                    {d.role} · {d.email.split('@')[0]}
+                  </span>
+                  <span className="denial-q">{d.query.slice(0, 80)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </aside>
 
       <main className="main">
@@ -398,7 +678,7 @@ export default function App({
           <div>
             <h1>{displayTitle(activeSession?.title, 'Ask across five domains')}</h1>
             <div className="chips" style={{ marginTop: 8 }}>
-              {(health?.domains ?? ['hr', 'finance', 'customer_support', 'privacy', 'legal']).map((d) => (
+              {roleDomains.map((d) => (
                 <span key={d} className="chip">
                   {domainLabel(d)}
                 </span>
@@ -419,9 +699,11 @@ export default function App({
               <p>
                 Prism reasons across HR, Finance, Customer Support, Privacy, and Legal — then re-renders the same
                 answer as prose, JSON, XML, Excel, or a draft email. Drop a file to add a session-only sixth domain.
+                Use the mic to dictate, and Speak on answers. Every reply cites sources and the workflow in{' '}
+                <code>docs/prompts.md</code>.
               </p>
               <div className="suggestions">
-                {SUGGESTIONS.map((s) => (
+                {emptySuggestions.map((s) => (
                   <button key={s.text} type="button" className="suggestion" onClick={() => void sendMessage(s.text)}>
                     <span className="suggestion-domain">{s.domain.replaceAll('_', ' ')}</span>
                     {s.text}
@@ -469,23 +751,73 @@ export default function App({
                       <span className="chip warn">no confident match</span>
                     )}
                     {m.isClarification && <span className="chip warn">needs clarification</span>}
+                    {m.workflow && (
+                      <span className="chip workflow" title={`Documented in ${m.promptDoc || 'docs/prompts.md'}`}>
+                        {workflowLabel(m.workflow)}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className={`copy-btn${copiedId === m.id ? ' copied' : ''}`}
+                      onClick={() => void copyAnswer(m)}
+                    >
+                      {copiedId === m.id ? 'Copied' : 'Copy'}
+                    </button>
+                    {ttsSupported && (
+                      <button
+                        type="button"
+                        className={`speak-btn${speakingId === m.id ? ' speaking' : ''}`}
+                        onClick={() => speakAnswer(m)}
+                        title={speakingId === m.id ? 'Stop speaking' : 'Speak answer'}
+                        aria-label={speakingId === m.id ? 'Stop speaking' : 'Speak answer'}
+                      >
+                        {speakingId === m.id ? 'Stop' : 'Speak'}
+                      </button>
+                    )}
                   </div>
                 )}
-                {m.sources && m.sources.length > 0 && (
-                  <div className="sources">
-                    Sources:{' '}
-                    {m.sources.slice(0, 4).map((s, i) => (
-                      <span key={s.id}>
-                        {i > 0 ? ' · ' : ''}
-                        {s.source_url.startsWith('http') ? (
-                          <a href={s.source_url} target="_blank" rel="noreferrer">
-                            {s.title || s.source_url}
-                          </a>
-                        ) : (
-                          s.title || s.source_url
+                {m.role === 'assistant' && (m.workflow || (m.sources && m.sources.length > 0)) && (
+                  <div className="cite-block">
+                    {m.sources && m.sources.length > 0 && (
+                      <div className="sources">
+                        <div className="sources-label">Sources</div>
+                        <ul className="sources-list">
+                          {(showAllSources[m.id] ? m.sources : m.sources.slice(0, 6)).map((s) => (
+                            <li key={s.id}>
+                              {s.domain ? (
+                                <span className="source-domain">{domainLabel(s.domain)}</span>
+                              ) : null}
+                              {s.source_url.startsWith('http') ? (
+                                <a href={s.source_url} target="_blank" rel="noreferrer">
+                                  {s.title || s.source_url}
+                                </a>
+                              ) : (
+                                <span>{s.title || s.source_url}</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                        {m.sources.length > 6 && (
+                          <button
+                            type="button"
+                            className="sources-more"
+                            onClick={() =>
+                              setShowAllSources((prev) => ({ ...prev, [m.id]: !prev[m.id] }))
+                            }
+                          >
+                            {showAllSources[m.id] ? 'Show fewer' : `Show all ${m.sources.length}`}
+                          </button>
                         )}
-                      </span>
-                    ))}
+                      </div>
+                    )}
+                    {m.workflow && (
+                      <div className="prompt-cite">
+                        Prompt / workflow: <code>{m.workflow}</code>
+                        {' · '}
+                        documented in <code>{m.promptDoc || 'docs/prompts.md'}</code>
+                        {' '}(system prompt in <code>prism/core/answer.py</code>)
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -575,17 +907,36 @@ export default function App({
             >
               {uploading ? '…' : '+'}
             </button>
+            {speechSupported && (
+              <button
+                type="button"
+                className={`mic-btn${listening ? ' listening' : ''}`}
+                title={listening ? 'Stop listening' : 'Dictate with microphone'}
+                aria-label={listening ? 'Stop listening' : 'Dictate with microphone'}
+                aria-pressed={listening}
+                disabled={busy || !activeId}
+                onClick={() => toggleMic()}
+              >
+                {listening ? '●' : 'Mic'}
+              </button>
+            )}
             <textarea
               value={draft}
               placeholder={
-                uploads.length
-                  ? 'Ask about the attached document — or anything across the five domains…'
-                  : 'Ask about leave policy, expense approvals, toilet troubleshooting, privacy, warranties… or drop a file'
+                listening
+                  ? 'Listening…'
+                  : uploads.length
+                    ? 'Ask about the attached document — or anything across the five domains…'
+                    : 'Ask about leave policy, expense approvals, toilet troubleshooting, privacy, warranties… or drop a file'
               }
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
+                  if (listening && recognitionRef.current) {
+                    recognitionRef.current.stop()
+                    setListening(false)
+                  }
                   void sendMessage(draft)
                 }
               }}
@@ -594,7 +945,17 @@ export default function App({
               {busy ? '…' : 'Send'}
             </button>
           </form>
-          <div className="status-line">{status}</div>
+          <div className="status-line">
+            {status}
+            {speechSupported || ttsSupported ? (
+              <span className="voice-hint">
+                {' · '}
+                Voice: {speechSupported ? 'mic' : 'no mic'}
+                {ttsSupported ? ' + speak' : ''}
+                {' '}(Chrome/Edge)
+              </span>
+            ) : null}
+          </div>
         </div>
       </main>
     </div>

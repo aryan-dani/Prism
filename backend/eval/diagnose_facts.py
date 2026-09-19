@@ -133,7 +133,7 @@ def main() -> None:
         domain, query = q["domain"], q["query"]
         print(f"  [{i}/{len(records)}] {q['id']} ({domain})", flush=True)
 
-        result = retrieve(query, domain=domain)
+        result = retrieve(query, role="general_employee", domain=domain)
         result.chunks = filter_cross_jurisdiction_chunks(query, result.chunks)
         context = "\n".join(c.text for c in result.chunks)
 

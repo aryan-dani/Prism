@@ -29,6 +29,7 @@ from rank_bm25 import BM25Okapi
 
 from prism.core.config import CHROMA_COLLECTION, CHROMA_DIR, DOMAINS
 from prism.core.embeddings import embed_batch, embed_one
+from prism.core.rbac import ROLES, apply_rbac_fields
 
 BM25_PATH = CHROMA_DIR / "bm25_index.pkl"
 
@@ -41,6 +42,8 @@ def tokenize(text: str) -> list[str]:
 
 def _flatten_metadata(record: dict) -> dict:
     """Chroma metadata values must be str/int/float/bool -- flatten lists."""
+    record = apply_rbac_fields(record)
+
     category = record.get("category", "")
     if isinstance(category, list):
         category_str = ",".join(category)
@@ -50,6 +53,11 @@ def _flatten_metadata(record: dict) -> dict:
     also_domains = record.get("also_domains") or []
     domain = record["domain"]
     all_domains = {domain, *also_domains}
+
+    access_roles = record.get("access_roles") or []
+    if isinstance(access_roles, str):
+        access_roles = [r.strip() for r in access_roles.split(",") if r.strip()]
+    access_set = set(access_roles)
 
     meta = {
         "domain": domain,
@@ -61,9 +69,14 @@ def _flatten_metadata(record: dict) -> dict:
         "is_synthetic": bool(record.get("is_synthetic", False)),
         "heading_path": " > ".join(record.get("heading_path", []) or []),
         "models_mentioned": ",".join(record.get("models_mentioned", []) or []),
+        "access_roles": ",".join(access_roles),
+        "source_priority": int(record.get("source_priority") or 10),
+        "source_kind": str(record.get("source_kind") or "html"),
     }
     for d in DOMAINS:
         meta[f"domain_{d}"] = d in all_domains
+    for r in ROLES:
+        meta[f"role_{r}"] = r in access_set
     return meta
 
 

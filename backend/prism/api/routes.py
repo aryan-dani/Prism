@@ -12,8 +12,9 @@ documented in docs/decisions.md.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response, StreamingResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
 import json
@@ -21,6 +22,14 @@ from queue import Empty, SimpleQueue
 from threading import Thread
 
 from prism.core.agent import handle_turn
+from prism.core.auth import (
+    AuthUser,
+    ensure_auth_ready,
+    get_current_user,
+    list_denials,
+    login as auth_login,
+    logout as auth_logout,
+)
 from prism.core.config import (
     EMBED_MODEL,
     GEN_MODEL,
@@ -32,12 +41,19 @@ from prism.core.config import (
     RuntimeInfo,
 )
 from prism.core.memory import UploadedDocRef, get_session_store
+from prism.core.rbac import DEMO_PASSWORD, SEED_USERS, domains_for_role
 from prism.core.renderers import available_formats, render as render_format
 from prism.core.store import get_store
 from prism.core.titler import generate_title_fast, maybe_retitle
 from prism.core.uploads import get_upload_store
 
 router = APIRouter()
+_bearer = HTTPBearer(auto_error=False)
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
 
 
 class CreateSessionResponse(BaseModel):
@@ -61,6 +77,8 @@ class ChatResponse(BaseModel):
     available_formats: list[str]
     title: str | None
     sustainability_note: str | None = None
+    workflow: str | None = None
+    prompt_doc: str | None = "docs/prompts.md"
 
 
 class RenderRequest(BaseModel):
@@ -73,6 +91,14 @@ class UploadResponse(BaseModel):
     status: str
     chunk_count: int
     uploaded_docs: list[dict]
+
+
+def _require_session(session_id: str, user: AuthUser):
+    store = get_session_store()
+    state = store.load_for_user(session_id, user.id)
+    if state is None:
+        raise HTTPException(404, "session not found")
+    return store, state
 
 
 def _ollama_status() -> dict:
@@ -140,25 +166,63 @@ def health():
     }
 
 
+@router.post("/auth/login")
+def login(req: LoginRequest):
+    ensure_auth_ready()
+    return auth_login(req.email, req.password)
+
+
+@router.post("/auth/logout")
+def logout(
+    user: AuthUser = Depends(get_current_user),
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+):
+    auth_logout(creds.credentials if creds else None)
+    return {"ok": True, "email": user.email}
+
+
+@router.get("/auth/me")
+def me(user: AuthUser = Depends(get_current_user)):
+    return {
+        "email": user.email,
+        "name": user.name,
+        "role": user.role,
+        "domains": domains_for_role(user.role),
+    }
+
+
+@router.get("/auth/demo-users")
+def demo_users():
+    """Public list of seeded demo accounts (shared password) for the login card."""
+    return {
+        "password": DEMO_PASSWORD,
+        "users": [{"email": u["email"], "name": u["name"], "role": u["role"]} for u in SEED_USERS],
+    }
+
+
+@router.get("/auth/denials")
+def denials(user: AuthUser = Depends(get_current_user)):
+    if user.role not in ("hr_staff", "finance_staff"):
+        raise HTTPException(403, "Access denials log is visible to HR and Finance staff only")
+    return {"denials": list_denials(50)}
+
+
 @router.post("/sessions", response_model=CreateSessionResponse)
-def create_session():
+def create_session(user: AuthUser = Depends(get_current_user)):
     store = get_session_store()
-    state = store.create()
+    state = store.create(user_id=user.id)
     return CreateSessionResponse(id=state.session_id, title=state.title)
 
 
 @router.get("/sessions")
-def list_sessions():
+def list_sessions(user: AuthUser = Depends(get_current_user)):
     store = get_session_store()
-    return store.list_sessions()
+    return store.list_sessions(user_id=user.id)
 
 
 @router.get("/sessions/{session_id}")
-def get_session(session_id: str):
-    store = get_session_store()
-    state = store.load(session_id)
-    if state is None:
-        raise HTTPException(404, "session not found")
+def get_session(session_id: str, user: AuthUser = Depends(get_current_user)):
+    _store, state = _require_session(session_id, user)
     return {
         "id": state.session_id,
         "title": state.title,
@@ -172,8 +236,8 @@ def get_session(session_id: str):
 
 
 @router.delete("/sessions/{session_id}")
-def delete_session(session_id: str):
-    store = get_session_store()
+def delete_session(session_id: str, user: AuthUser = Depends(get_current_user)):
+    store, _state = _require_session(session_id, user)
     store.delete(session_id)
     return {"ok": True}
 
@@ -184,14 +248,15 @@ def delete_session(session_id: str):
 
 
 @router.post("/sessions/{session_id}/upload", response_model=UploadResponse)
-async def upload_document(session_id: str, file: UploadFile = File(...)):
+async def upload_document(
+    session_id: str,
+    file: UploadFile = File(...),
+    user: AuthUser = Depends(get_current_user),
+):
     """Attach a file to this chat. Parsed, chunked, embedded locally and kept
     in a session-filtered collection — never merged into the five KBs, purged
     on session delete or after UPLOAD_TTL_HOURS."""
-    store = get_session_store()
-    state = store.load(session_id)
-    if state is None:
-        raise HTTPException(404, "session not found")
+    store, state = _require_session(session_id, user)
 
     data = await file.read()
     if not data:
@@ -209,7 +274,7 @@ async def upload_document(session_id: str, file: UploadFile = File(...)):
         raise HTTPException(500, f"could not ingest file: {str(e)[:200]}")
 
     # Re-load right before saving so a concurrent chat turn is not clobbered.
-    state = store.load(session_id) or state
+    state = store.load_for_user(session_id, user.id) or state
     state.uploaded_docs.append(
         UploadedDocRef(
             id=doc.id,
@@ -232,20 +297,16 @@ async def upload_document(session_id: str, file: UploadFile = File(...)):
 
 
 @router.get("/sessions/{session_id}/uploads")
-def list_uploads(session_id: str):
-    store = get_session_store()
-    state = store.load(session_id)
-    if state is None:
-        raise HTTPException(404, "session not found")
+def list_uploads(session_id: str, user: AuthUser = Depends(get_current_user)):
+    _store, state = _require_session(session_id, user)
     return {"uploaded_docs": [d.model_dump() for d in state.uploaded_docs]}
 
 
 @router.delete("/sessions/{session_id}/uploads/{doc_id}")
-def delete_upload(session_id: str, doc_id: str):
-    store = get_session_store()
-    state = store.load(session_id)
-    if state is None:
-        raise HTTPException(404, "session not found")
+def delete_upload(session_id: str, doc_id: str, user: AuthUser = Depends(get_current_user)):
+    store, state = _require_session(session_id, user)
+    if not any(d.id == doc_id for d in state.uploaded_docs):
+        raise HTTPException(404, "upload not found in this session")
     get_upload_store().delete_document(session_id, doc_id)
     state.uploaded_docs = [d for d in state.uploaded_docs if d.id != doc_id]
     if state.active_domain == "uploaded" and not state.uploaded_docs:
@@ -255,16 +316,13 @@ def delete_upload(session_id: str, doc_id: str):
 
 
 @router.post("/sessions/{session_id}/chat", response_model=ChatResponse)
-def chat(session_id: str, req: ChatRequest):
-    store = get_session_store()
-    state = store.load(session_id)
-    if state is None:
-        raise HTTPException(404, "session not found")
+def chat(session_id: str, req: ChatRequest, user: AuthUser = Depends(get_current_user)):
+    store, state = _require_session(session_id, user)
 
     was_first_exchange = len(state.turns) == 0
     prev_domain = state.active_domain
 
-    result = handle_turn(state, req.message)
+    result = handle_turn(state, req.message, role=user.role, user_email=user.email)
 
     # Session titling (Piece 2c): one cheap call on the first exchange only,
     # plus an optional re-title if the topic clearly moved to a new domain.
@@ -310,6 +368,8 @@ def _chat_response(session_id: str, state, result) -> ChatResponse:
         available_formats=formats,
         title=state.title,
         sustainability_note=state.last_answer.sustainability_note if state.last_answer else None,
+        workflow=getattr(result, "workflow", None) or "rag_canonical",
+        prompt_doc=getattr(result, "prompt_doc", None) or "docs/prompts.md",
     )
 
 
@@ -319,26 +379,25 @@ def _sse(event: str, data: dict | str) -> str:
 
 
 @router.post("/sessions/{session_id}/chat/stream")
-def chat_stream(session_id: str, req: ChatRequest):
+def chat_stream(session_id: str, req: ChatRequest, user: AuthUser = Depends(get_current_user)):
     """SSE status tokens, then a final `result` event with the same ChatResponse JSON.
 
     Does not stream partial answer tokens — CanonicalAnswer must validate fully first.
     """
-    store = get_session_store()
-    state = store.load(session_id)
-    if state is None:
-        raise HTTPException(404, "session not found")
+    store, state = _require_session(session_id, user)
 
     was_first_exchange = len(state.turns) == 0
     prev_domain = state.active_domain
     q: SimpleQueue = SimpleQueue()
+    role = user.role
+    email = user.email
 
     def on_status(stage: str) -> None:
         q.put(("status", {"stage": stage}))
 
     def worker() -> None:
         try:
-            result = handle_turn(state, req.message, on_status=on_status)
+            result = handle_turn(state, req.message, role=role, user_email=email, on_status=on_status)
             q.put(("status", {"stage": "titling"}))
             if was_first_exchange and not result.is_clarification:
                 try:
@@ -383,11 +442,8 @@ def chat_stream(session_id: str, req: ChatRequest):
 
 
 @router.post("/sessions/{session_id}/render")
-def render_last_answer(session_id: str, req: RenderRequest):
-    store = get_session_store()
-    state = store.load(session_id)
-    if state is None:
-        raise HTTPException(404, "session not found")
+def render_last_answer(session_id: str, req: RenderRequest, user: AuthUser = Depends(get_current_user)):
+    _store, state = _require_session(session_id, user)
     if state.last_answer is None:
         raise HTTPException(400, "no answer yet in this session to render")
 
@@ -406,11 +462,8 @@ def render_last_answer(session_id: str, req: RenderRequest):
 
 
 @router.get("/sessions/{session_id}/download/{fmt}")
-def download(session_id: str, fmt: str):
-    store = get_session_store()
-    state = store.load(session_id)
-    if state is None:
-        raise HTTPException(404, "session not found")
+def download(session_id: str, fmt: str, user: AuthUser = Depends(get_current_user)):
+    _store, state = _require_session(session_id, user)
     if state.last_answer is None:
         raise HTTPException(400, "no answer yet in this session to render")
     try:

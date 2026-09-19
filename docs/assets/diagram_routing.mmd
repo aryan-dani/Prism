@@ -1,0 +1,9 @@
+flowchart LR
+    Query["User query"] --> Anchor["Cosine sim vs domain anchor phrases"]
+    Query --> Votes["Hit-vote share from agnostic top-K retrieval"]
+    Anchor --> Combine["Weighted blend 0.7 / 0.3"]
+    Votes --> Combine
+    Combine --> Margin{"Clear winner?"}
+    Margin -->|"yes"| Route["Route to that domain"]
+    Margin -->|"no sticky is top contender"| Sticky["Stay in sticky domain"]
+    Margin -->|"no and no sticky signal"| Clarify["Ask a clarifying question"]

@@ -27,6 +27,14 @@ from prism.core.config import (
 )
 from prism.core.memory import SessionState, SourceDocRef
 from prism.core.policy_math import try_deterministic_policy_answer
+from prism.core.rbac import (
+    access_denied_message,
+    domains_for_role,
+    looks_like_sensitive_finance_query,
+    looks_like_sensitive_hr_query,
+    may_access_domain,
+    normalize_role,
+)
 from prism.core.renderers import FormatName, RenderResult, render as render_format
 from prism.core.renderers import excel as excel_renderer
 from prism.core.retriever import RetrievalResult, confidence_from_hits, retrieve
@@ -90,6 +98,63 @@ def _emit(on_status: StatusCallback | None, stage: str) -> None:
         on_status(stage)
 
 
+def _maybe_rbac_deny(*, role: str, email: str, query: str) -> tuple[str | None, str] | None:
+    """Return (domain, message) if this query must be denied before retrieval."""
+    from prism.core.auth import log_denial
+    from prism.core.text_utils import signaled_domains
+
+    role = normalize_role(role)
+    signaled = signaled_domains(query)
+
+    # Customer asking clearly HR/Finance
+    if role == "customer":
+        internal = [d for d in signaled if d in ("hr", "finance")]
+        if internal or any(
+            k in query.lower()
+            for k in (
+                "leave policy",
+                "casual leave",
+                "per diem",
+                "expense claim",
+                "approval band",
+                "capex",
+                "reimbursement",
+                "wfh",
+                "probation",
+                "grievance",
+            )
+        ):
+            domain = internal[0] if internal else "hr"
+            msg = access_denied_message(role=role, domain=domain, query=query)
+            log_denial(email=email, role=role, query=query, attempted_domain=domain, reason=msg)
+            return domain, msg
+
+    # Employee asking named salary / CTC
+    if role == "general_employee" and looks_like_sensitive_finance_query(query):
+        msg = access_denied_message(role=role, domain="finance", query=query)
+        log_denial(email=email, role=role, query=query, attempted_domain="finance", reason=msg)
+        return "finance", msg
+
+    # Employee asking named employee HR records
+    if role == "general_employee" and looks_like_sensitive_hr_query(query):
+        msg = access_denied_message(role=role, domain="hr", query=query)
+        log_denial(email=email, role=role, query=query, attempted_domain="hr", reason=msg)
+        return "hr", msg
+
+    # Finance staff asking personnel leave files (not compensation)
+    if role == "finance_staff" and looks_like_sensitive_hr_query(query) and not looks_like_sensitive_finance_query(
+        query
+    ):
+        msg = access_denied_message(role=role, domain="hr", query=query)
+        log_denial(email=email, role=role, query=query, attempted_domain="hr", reason=msg)
+        return "hr", msg
+
+    return None
+
+
+PROMPT_DOC = "docs/prompts.md"
+
+
 @dataclass
 class TurnResult:
     session: SessionState
@@ -99,6 +164,9 @@ class TurnResult:
     domain: str | None
     is_clarification: bool
     is_reformat: bool
+    # Jury-facing label: which workflow answered this turn (see docs/prompts.md).
+    workflow: str = "rag_canonical"
+    prompt_doc: str = PROMPT_DOC
 
 
 def detect_reformat_request(message: str) -> FormatName | None:
@@ -149,7 +217,14 @@ def _answer_memory_lookback(session: SessionState, user_message: str) -> Canonic
     )
 
 
-def _refuse(session: SessionState, user_message: str, reply: str, *, domain: str | None = None) -> TurnResult:
+def _refuse(
+    session: SessionState,
+    user_message: str,
+    reply: str,
+    *,
+    domain: str | None = None,
+    workflow: str = "jailbreak_refuse",
+) -> TurnResult:
     session.add_turn("user", user_message)
     answer = CanonicalAnswer(
         query=user_message,
@@ -174,6 +249,7 @@ def _refuse(session: SessionState, user_message: str, reply: str, *, domain: str
         domain=domain or session.active_domain,
         is_clarification=False,
         is_reformat=False,
+        workflow=workflow,
     )
 
 
@@ -226,9 +302,13 @@ def _commit_answer(
     answer: CanonicalAnswer,
     domain: str | None,
     chunks: list[RetrievedChunk] | None = None,
+    workflow: str = "rag_canonical",
 ) -> TurnResult:
+    from prism.core.answer_polish import apply_source_priority_caveat
     from prism.core.water_math import attach_sustainability_note
 
+    if chunks:
+        apply_source_priority_caveat(answer, chunks)
     attach_sustainability_note(answer, query=answer.query, domain=domain)
     session.active_domain = domain
     session.last_answer = answer
@@ -260,6 +340,7 @@ def _commit_answer(
         domain=domain,
         is_clarification=False,
         is_reformat=False,
+        workflow=workflow,
     )
 
 
@@ -277,7 +358,9 @@ def _filter_noise_chunks(query: str, chunks: list[RetrievedChunk]) -> list[Retri
     return out
 
 
-def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -> RetrievalResult:
+def _retrieve_for_query(
+    query: str, *, role: str, domain: str | None, multi_domain: bool
+) -> RetrievalResult:
     if multi_domain:
         signaled = signaled_domains(query)
         domains = list(signaled) or (
@@ -289,14 +372,25 @@ def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -
                     domains.append(d)
         fallback_all = False
         if not domains:
-            domains = ["hr", "finance", "privacy", "customer_support", "legal"]
+            domains = list(domains_for_role(role))
             fallback_all = True
+
+        # Drop domains this role cannot see
+        domains = [d for d in domains if may_access_domain(role, d)]
+        if not domains:
+            return RetrievalResult(
+                chunks=[],
+                query=query,
+                domain_filter=None,
+                best_dense_distance=None,
+                is_confident=False,
+            )
 
         by_id: dict[str, RetrievedChunk] = {}
         best_distance: float | None = None
         confident_any = False
         for d in domains[:4]:
-            part = retrieve(query, domain=d, top_k=3)
+            part = retrieve(query, role=role, domain=d, top_k=3)
             if part.best_dense_distance is not None:
                 best_distance = (
                     part.best_dense_distance
@@ -314,7 +408,7 @@ def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -
         # when we fell back to "search everything".
         run_agnostic = fallback_all or (len(domains) < 2 and not confident_any)
         if run_agnostic:
-            agnostic = retrieve(query, domain=None, top_k=4)
+            agnostic = retrieve(query, role=role, domain=None, top_k=4)
             for c in agnostic.chunks:
                 prev = by_id.get(c.id)
                 if prev is None or (c.fused_score or 0) > (prev.fused_score or 0):
@@ -341,7 +435,7 @@ def _retrieve_for_query(query: str, *, domain: str | None, multi_domain: bool) -
             best_fused_score=fused[0].fused_score if fused else None,
         )
 
-    result = retrieve(query, domain=domain)
+    result = retrieve(query, role=role, domain=domain)
     result.chunks = _filter_noise_chunks(query, result.chunks)
     return result
 
@@ -354,7 +448,9 @@ _FOCUS_STOP = {
 }
 
 
-def _focus_merge(result: RetrievalResult, raw_query: str, *, domain: str | None) -> RetrievalResult:
+def _focus_merge(
+    result: RetrievalResult, raw_query: str, *, role: str, domain: str | None
+) -> RetrievalResult:
     """Anaphora turns retrieve on 8 turns of context + the follow-up, so a topic
     pivot ("…is that covered under warranty", "…can I get a refund instead")
     gets drowned by the previous topic's chunks. Run one extra small retrieval on
@@ -363,7 +459,7 @@ def _focus_merge(result: RetrievalResult, raw_query: str, *, domain: str | None)
     words = [w for w in re.findall(r"[a-z][a-z-]{2,}", raw_query.lower()) if w not in _FOCUS_STOP]
     if len(words) < 1:
         return result
-    focus = retrieve(raw_query, domain=domain, top_k=3)
+    focus = retrieve(raw_query, role=role, domain=domain, top_k=3)
     if not focus.chunks:
         return result
     by_id: dict[str, RetrievedChunk] = {c.id: c for c in result.chunks}
@@ -433,7 +529,7 @@ def _maybe_answer_from_uploads(
             no_answer=True,
             sources=[f"upload://{n}" for n in names],
         )
-        return _commit_answer(session, answer=answer, domain="uploaded", chunks=[])
+        return _commit_answer(session, answer=answer, domain="uploaded", chunks=[], workflow="upload_rag")
 
     extra_notes = [
         f"The user attached document(s): {labels}. Answer ONLY from those uploaded chunks. "
@@ -476,16 +572,20 @@ def _maybe_answer_from_uploads(
             domain="uploaded",
             is_clarification=False,
             is_reformat=False,
+            workflow="upload_rag",
         )
-    return _commit_answer(session, answer=answer, domain="uploaded", chunks=result.chunks)
+    return _commit_answer(session, answer=answer, domain="uploaded", chunks=result.chunks, workflow="upload_rag")
 
 
 def handle_turn(
     session: SessionState,
     user_message: str,
     *,
+    role: str = "general_employee",
+    user_email: str = "anonymous@prism.local",
     on_status: StatusCallback | None = None,
 ) -> TurnResult:
+    role = normalize_role(role)
     # ------------------------------------------------------------------
     # 0a. Jailbreak / prompt-exfiltration
     # ------------------------------------------------------------------
@@ -496,6 +596,7 @@ def handle_turn(
             user_message,
             "I can't share internal system instructions or switch into unrestricted modes. "
             "Ask a question about HR, Finance, product support, Privacy, or Legal policy instead.",
+            workflow="jailbreak_refuse",
         )
 
     # ------------------------------------------------------------------
@@ -509,16 +610,39 @@ def handle_turn(
             "or other authority in chat. The published Finance approval bands stay as written in policy. "
             "I can explain those bands from the Finance manual if you ask.",
             domain="finance",
+            workflow="policy_override_refuse",
         )
+
+    # ------------------------------------------------------------------
+    # 0b2. Role-based access denials (before retrieval / LLM)
+    # ------------------------------------------------------------------
+    deny = _maybe_rbac_deny(role=role, email=user_email, query=user_message)
+    if deny is not None:
+        domain, reason = deny
+        session.add_turn("user", user_message)
+        answer = CanonicalAnswer(
+            query=user_message,
+            domain=domain or "hr",
+            direct_answer=reason,
+            confidence="none",
+            no_answer=True,
+            caveats=["RBAC denial — logged. Chat claims of role/authority do not change access."],
+        )
+        _emit(on_status, "done")
+        return _commit_answer(session, answer=answer, domain=domain, chunks=[], workflow="rbac_deny")
 
     # ------------------------------------------------------------------
     # 0c. Deterministic leave / finance arithmetic (do not trust the LLM)
     #     Skip when the user is clearly asking about an uploaded file so
     #     Meridian policy numbers do not override their document.
+    #     Customers never get policy_math (internal HR/Finance).
     # ------------------------------------------------------------------
     _emit(on_status, "policy_lookup")
     upload_names = [d.filename for d in session.uploaded_docs]
-    skip_policy_math = bool(upload_names) and query_points_at_uploads(user_message, upload_names)
+    skip_policy_math = (
+        role == "customer"
+        or (bool(upload_names) and query_points_at_uploads(user_message, upload_names))
+    )
     computed = None if skip_policy_math else try_deterministic_policy_answer(user_message)
     if computed is not None:
         session.add_turn("user", user_message)
@@ -540,9 +664,10 @@ def handle_turn(
                 domain=domain,
                 is_clarification=False,
                 is_reformat=False,
+                workflow="policy_math",
             )
         _emit(on_status, "done")
-        return _commit_answer(session, answer=answer, domain=domain, chunks=[])
+        return _commit_answer(session, answer=answer, domain=domain, chunks=[], workflow="policy_math")
 
     # ------------------------------------------------------------------
     # 1. Reformat-only request against the last answer
@@ -565,6 +690,7 @@ def handle_turn(
                 domain=session.active_domain,
                 is_clarification=False,
                 is_reformat=True,
+                workflow="reformat",
             )
         try:
             rr = render_format(session.last_answer, requested_format)
@@ -579,6 +705,7 @@ def handle_turn(
                 domain=session.active_domain,
                 is_clarification=False,
                 is_reformat=True,
+                workflow="reformat",
             )
         reply = rr.content if not rr.is_binary else f"(Generated a downloadable {requested_format} file.)"
         session.add_turn("assistant", reply if isinstance(reply, str) else "[binary output]", domain=session.active_domain)
@@ -590,6 +717,7 @@ def handle_turn(
             domain=session.active_domain,
             is_clarification=False,
             is_reformat=True,
+            workflow="reformat",
         )
 
     # ------------------------------------------------------------------
@@ -612,6 +740,8 @@ def handle_turn(
     vague_domains = vague_new_session_clarify(user_message, has_prior_turns=len(session.turns) > 1)
     if session.uploaded_docs:
         vague_domains = None
+    if vague_domains:
+        vague_domains = [d for d in vague_domains if may_access_domain(role, d)]
     if vague_domains and not forced_domain:
         question = (
             "I want to make sure I point you to the right place — is this "
@@ -632,6 +762,7 @@ def handle_turn(
             domain=None,
             is_clarification=True,
             is_reformat=False,
+            workflow="clarify",
         )
 
     # ------------------------------------------------------------------
@@ -639,7 +770,7 @@ def handle_turn(
     # ------------------------------------------------------------------
     if is_conversation_memory_query(user_message):
         answer = _answer_memory_lookback(session, user_message)
-        return _commit_answer(session, answer=answer, domain=answer.domain, chunks=[])
+        return _commit_answer(session, answer=answer, domain=answer.domain, chunks=[], workflow="session_memory")
 
     upload_turn = _maybe_answer_from_uploads(session, user_message, on_status=on_status)
     if upload_turn is not None:
@@ -665,7 +796,11 @@ def handle_turn(
     # ------------------------------------------------------------------
     # 3b. Session recall: "going back to … leave carry-forward … draft email"
     # ------------------------------------------------------------------
-    if want_email and ("carry-forward" in effective_query.lower() or "carry forward" in effective_query.lower()):
+    if (
+        role != "customer"
+        and want_email
+        and ("carry-forward" in effective_query.lower() or "carry forward" in effective_query.lower())
+    ):
         prior = _early_cl_carry_fact(session)
         if prior and re.search(r"\b5\b", prior):
             from datetime import date
@@ -697,6 +832,7 @@ def handle_turn(
                 domain="hr",
                 is_clarification=False,
                 is_reformat=False,
+                workflow="session_email_recall",
             )
 
     # ------------------------------------------------------------------
@@ -715,7 +851,7 @@ def handle_turn(
         # returns a clarifying question and generation never happens, so the
         # catch never fires either. Force a concrete domain so this always
         # reaches generation instead of exiting through the clarify branch.
-        domain = "finance"
+        domain = "finance" if may_access_domain(role, "finance") else "legal"
         route_result = None
     elif is_soft_prompt_exfil_request(effective_query):
         domain = "legal"
@@ -723,13 +859,13 @@ def handle_turn(
     elif is_contractor_damage_query(effective_query):
         domain = "customer_support"
         route_result = None
-    elif any(
+    elif role != "customer" and any(
         p in effective_query.lower()
         for p in ("leave carry-forward", "leave carry forward", "casual leave", "carry-forward limit")
     ):
         domain = "hr"
         route_result = None
-    elif (
+    elif role != "customer" and (
         any(w in effective_query.lower() for w in ("cap", "limit", "threshold", "how much", "amount"))
         and any(c in effective_query.lower() for c in ("rupee", "₹", "rs.", "rs ", "inr", "per diem"))
     ):
@@ -754,13 +890,16 @@ def handle_turn(
         # too short/weak to tell -- that fallback is the intended mechanism
         # for anaphoric follow-ups, not contaminating the embedding itself.
         query_embedding = embed_one(effective_query)
-        agnostic_hits = retrieve(effective_query, domain=None, top_k=10).chunks
+        agnostic_hits = retrieve(effective_query, role=role, domain=None, top_k=10).chunks
         votes = score_by_hit_votes(agnostic_hits)
-        route_result = route(query_embedding, hit_votes=votes, sticky_domain=session.active_domain)
+        sticky = session.active_domain if may_access_domain(role, session.active_domain) else None
+        route_result = route(query_embedding, hit_votes=votes, sticky_domain=sticky)
 
         if route_result.ambiguous:
             candidates = sorted(route_result.scores.items(), key=lambda kv: -kv[1])[:2]
-            candidate_domains = [c for c, _ in candidates]
+            candidate_domains = [c for c, _ in candidates if may_access_domain(role, c)]
+            if not candidate_domains:
+                candidate_domains = domains_for_role(role)[:2]
             question = (
                 "I want to make sure I point you to the right place -- is this "
                 + " or ".join(CLARIFY_DOMAIN_LABELS.get(d, d) for d in candidate_domains)
@@ -787,16 +926,33 @@ def handle_turn(
                 domain=None,
                 is_clarification=True,
                 is_reformat=False,
+                workflow="clarify",
             )
         domain = route_result.domain
+
+    # If routing picked a forbidden domain, deny instead of retrieving.
+    if domain and not may_access_domain(role, domain):
+        from prism.core.auth import log_denial
+
+        msg = access_denied_message(role=role, domain=domain, query=user_message)
+        log_denial(email=user_email, role=role, query=user_message, attempted_domain=domain, reason=msg)
+        answer = CanonicalAnswer(
+            query=user_message,
+            domain=domain,
+            direct_answer=msg,
+            confidence="none",
+            no_answer=True,
+            caveats=["RBAC denial — logged."],
+        )
+        return _commit_answer(session, answer=answer, domain=domain, chunks=[], workflow="rbac_deny")
 
     # ------------------------------------------------------------------
     # 5. Retrieve
     # ------------------------------------------------------------------
     _emit(on_status, "retrieving")
-    result = _retrieve_for_query(retrieval_query, domain=domain, multi_domain=multi_domain)
+    result = _retrieve_for_query(retrieval_query, role=role, domain=domain, multi_domain=multi_domain)
     if anaphora_expanded and not multi_domain:
-        result = _focus_merge(result, effective_query, domain=domain)
+        result = _focus_merge(result, effective_query, role=role, domain=domain)
 
     extra_notes: list[str] = []
     if anaphora_expanded:
@@ -916,6 +1072,7 @@ def handle_turn(
             domain=domain,
             is_clarification=True,
             is_reformat=False,
+            workflow="clarify",
         )
 
     # Substantive "draft an email summarizing…" → generate facts, then email-render.
@@ -944,9 +1101,10 @@ def handle_turn(
             domain=domain,
             is_clarification=False,
             is_reformat=False,
+            workflow="rag_email",
         )
 
-    return _commit_answer(session, answer=answer, domain=domain, chunks=result.chunks)
+    return _commit_answer(session, answer=answer, domain=domain, chunks=result.chunks, workflow="rag_canonical")
 
 
 def _match_domain_from_reply(reply: str, candidates: list[str]) -> str | None:

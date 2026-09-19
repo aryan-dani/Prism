@@ -22,10 +22,20 @@ Built for the Kohler-MITWPU AI Research Lab case study challenge (individual sub
 | **Honest no-answer** | Refuses to fabricate when retrieval isn’t confident (stricter for Legal/Privacy) |
 | **Dynamic output formats** | One canonical answer object → prose / JSON / XML / Excel / email without re-retrieval |
 | **Bring your own document** | Drop a PDF / DOCX / TXT / CSV into the chat → indexed locally as a session-scoped sixth domain, answerable immediately alongside the five KBs; purged when the chat is deleted (24h TTL) |
+| **Role-based access (RBAC)** | Login with demo roles (customer → HR/Finance staff). Retrieval filters by Chroma `role_*` metadata before any chunk reaches the LLM |
+| **Voice** | Browser Web Speech — mic dictation + speak-answer (Chrome/Edge); no cloud STT |
+| **Cited sources & prompts** | Every answer lists retrieved sources; UI labels the workflow id documented in [`docs/prompts.md`](docs/prompts.md) |
 | **Local-first** | Ollama + embedded Chroma; no cloud LLM, no separate vector DB server — uploaded documents never leave the machine |
 
 **Architecture map:** [`docs/architecture.md`](docs/architecture.md) — system diagram, five knowledge bases (sources + ingest), turn pipeline, module index, improvement roadmap.  
 **Decision log:** [`docs/decisions.md`](docs/decisions.md) · **Prompts / workflows:** [`docs/prompts.md`](docs/prompts.md)
+
+### Prompts & citations (jury)
+
+Judges ask for the prompts and sources behind answers. Prism surfaces both:
+
+1. **Full prompt inventory** — [`docs/prompts.md`](docs/prompts.md) (PDF: [`docs/pdf/prompts.pdf`](docs/pdf/prompts.pdf)): system prompt (`prism/core/answer.py` → `SYSTEM_PROMPT`), titler prompts, and every non-LLM workflow (`policy_math`, RBAC deny, reformat, clarify, upload RAG, …).
+2. **In the chat UI** — each assistant reply shows **Sources** (domain + title/URL from retrieved chunks) and a **Prompt / workflow** line with the workflow id that answered the turn (e.g. `rag_canonical`, `policy_math`, `rbac_deny`). Citation integrity drops model-claimed URLs that were not retrieved.
 
 ---
 
@@ -79,24 +89,38 @@ Or from the repo root (fails loudly if any domain JSONL is missing/empty):
 powershell -ExecutionPolicy Bypass -File scripts/rebuild_index.ps1
 ```
 
-Expected: **~497 chunks** indexed into collection `prism_kb`.
+Expected: **~519 chunks** indexed into collection `prism_kb` (includes HR records, compensation, warranty PDF fixture).
 
-### 3. Run
+### 2. Run
 
-Launch both Backend API and Frontend UI in separate terminal windows with a single command:
+Launch both Backend API and Frontend UI:
 
 ```powershell
 .\start.ps1
-# or: powershell -File scripts/start.ps1
+# Linux/macOS: bash scripts/start.sh
 ```
 
-Or manually in separate terminals:
-- **Backend API**: `cd backend; uv run uvicorn prism.api.main:app --reload --port 8000`
-- **Frontend UI**: `cd frontend; npm run dev`
+Open **http://localhost:5173**. Sign in with a demo account (printed on the login card).
 
-Open **http://localhost:5173** (landing page → **Try the live demo**). Demo upload file: `backend/eval/fixtures/orion_travel_policy.md`.
+**Smoke-test login (full domain access):** `alex.employee@prism.local` / `Prism2026!`
 
-API docs: http://127.0.0.1:8000/docs · Health: http://127.0.0.1:8000/api/health
+| Role | Example email | Sees |
+|---|---|---|
+| Customer | `priya.customer@prism.local` | Support, Privacy, Legal only |
+| General Employee | `alex.employee@prism.local` | + HR/Finance policies |
+| HR Staff | `riya.hr@prism.local` | + employee leave records |
+| Finance Staff | `arun.finance@prism.local` | + CTC / compensation |
+
+Shared password for all seeded users: **`Prism2026!`**
+
+API docs: http://127.0.0.1:8000/docs · Health (no auth): http://127.0.0.1:8000/api/health
+
+**Runtime KB upsert (bonus):**
+
+```powershell
+cd backend
+uv run python -m prism.ingest.upsert --file eval/fixtures/k_3901_warranty.pdf --domain legal --source-id fixture-k3901-warranty --replace-source
+```
 
 ---
 
@@ -217,6 +241,9 @@ uv run python -m prism.ingest.validate
 # Smoke: $env:PRISM_STRESS_LIMIT="3"
 uv run python -m eval.stress.harness
 # → backend/eval/results/stress/LATEST_REPORT.md
+
+# RBAC + conflict smoke (login as customer / employee / HR / finance)
+uv run python -m eval.stress.rbac_smoke
 
 cd ..
 ```

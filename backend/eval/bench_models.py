@@ -96,7 +96,7 @@ def bench_model(model: str, questions: list[dict]) -> dict:
         if q.get("expected_no_answer"):
             noanswer_total += 1
 
-        result = retrieve(query, domain=domain)
+        result = retrieve(query, role="general_employee", domain=domain)
         t0 = time.monotonic()
         try:
             if not result.chunks or not result.is_confident:

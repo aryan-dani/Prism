@@ -32,7 +32,7 @@ from prism.core.embeddings import embed_batch, embed_one
 from prism.core.retriever import RetrievalResult, _rrf_fuse
 from prism.core.store import RetrievedChunk, get_store, tokenize
 from prism.ingest.chunk import HEADING_RE, chunk_markdown, split_if_too_long
-from prism.ingest.parse_pdf import extract_text as extract_pdf_text
+from prism.ingest.extract import extract_plain_text
 
 _lock = threading.RLock()
 
@@ -54,28 +54,10 @@ def _safe_filename(name: str) -> str:
 
 
 def extract_plain_text(path: Path, suffix: str) -> str:
-    if suffix == ".pdf":
-        return extract_pdf_text(path)
-    if suffix == ".docx":
-        from docx import Document
+    """Backward-compatible wrapper — prefer prism.ingest.extract."""
+    from prism.ingest.extract import extract_plain_text as _extract
 
-        doc = Document(str(path))
-        parts = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
-        for table in doc.tables:
-            for row in table.rows:
-                cells = [c.text.strip() for c in row.cells if c.text.strip()]
-                if cells:
-                    parts.append(" | ".join(cells))
-        return "\n".join(parts)
-    if suffix in {".html", ".htm"}:
-        from bs4 import BeautifulSoup
-
-        raw = path.read_text(encoding="utf-8", errors="replace")
-        soup = BeautifulSoup(raw, "lxml")
-        for tag in soup(["script", "style", "nav", "footer"]):
-            tag.decompose()
-        return soup.get_text("\n", strip=True)
-    return path.read_text(encoding="utf-8", errors="replace")
+    return _extract(path, suffix)
 
 
 @dataclass
@@ -190,8 +172,12 @@ class UploadStore:
         )
 
     def delete_document(self, session_id: str, doc_id: str) -> None:
+        """Delete upload chunks for this session only (session_id + doc_id)."""
         with _lock:
-            got = self._collection.get(where={"doc_id": doc_id}, include=[])
+            got = self._collection.get(
+                where={"$and": [{"doc_id": doc_id}, {"session_id": session_id}]},
+                include=[],
+            )
             ids = list(got.get("ids") or [])
             if ids:
                 self._collection.delete(ids=ids)

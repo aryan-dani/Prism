@@ -2,7 +2,23 @@
 
 This document inventories every AI prompt, system instruction, and non-AI workflow used to build and run Prism (Kohler-MITWPU AI Research Lab, Track 3). Export this Markdown to PDF for the submission requirement.
 
+**Where to look in a live demo:** each chat reply returns `workflow` + `prompt_doc` in the API (`ChatResponse`) and shows them under the bubble as “Prompt / workflow”. Source URLs under **Sources** are the retrieved chunks that grounded the answer (citation integrity drops extras).
+
 **Sourcing split (stated explicitly):** Customer Support, Privacy, and Legal/Compliance are **real** public Kohler documents. HR and Finance are **synthetic** Meridian Fixtures policies, authored because no real internal Kohler HR/Finance manuals are public. Full rationale: `docs/decisions.md` §6.
+
+**Workflow ids returned by the API** (match the UI chip):
+
+| `workflow` | Meaning | See |
+|---|---|---|
+| `rag_canonical` | Hybrid retrieve → `SYSTEM_PROMPT` JSON answer → prose | §1 |
+| `rag_email` | Same RAG path, then email renderer | §1, §3 |
+| `policy_math` | Deterministic leave / approval-band arithmetic | §4 |
+| `rbac_deny` | Role denied before retrieval | §4 RBAC |
+| `jailbreak_refuse` / `policy_override_refuse` | Deterministic refuse | §4 |
+| `reformat` | Re-render `last_answer` only | §4 |
+| `clarify` | Ambiguous domain → clarifying question | §4 |
+| `session_memory` / `session_email_recall` | History lookback | §4 |
+| `upload_rag` | Session-scoped uploaded document | §4 |
 
 ---
 
@@ -78,6 +94,8 @@ These are documented here because they are part of the agent workflow even thoug
 | Anaphora | Fold recent turn text into retrieval query when “that/it/the one…” appears; **plus one extra `top_k=3` “focus” retrieval on the raw follow-up** so a topic pivot (“…covered under warranty”, “…refund instead”) is not drowned by the previous topic, and a generation note to answer the follow-up rather than re-summarize | `prism/core/agent.py` |
 | Session document upload (ad-hoc 6th domain) | `POST /sessions/{id}/upload` → parse by extension (pypdf / python-docx / BeautifulSoup / text) → heading-aware chunk at 450 tokens → embed with the same `nomic-embed-text` → **separate** Chroma collection `prism_uploads` tagged `session_id`/`doc_id`. Retrieval is filtered by session; used when the user points at the file (“this document”, filename) **or** upload confidence passes a dense floor **and** a comparative check against the KBs (`UPLOAD_KB_MARGIN`). Deterministic `policy_math` is skipped when the user points at their file so Meridian numbers never override the user’s own document. Purged on session delete, on remove, and by a 24h TTL sweep at startup. No new prompt — the generation call gets an extra note: *“Answer ONLY from those uploaded chunks… if the uploaded text does not answer, set no_answer=true.”* | `prism/core/uploads.py`, `agent.py`, `api/routes.py` |
 | Jailbreak / prompt exfil | Deterministic refuse (no LLM) on “ignore previous instructions / print system prompt / developer mode” | `prism/core/text_utils.py`, `agent.py` |
+| **RBAC (email + role)** | bcrypt-hashed SQLite users; opaque Bearer tokens; **Chroma `where` ANDs `role_{role}=True` before any chunk reaches the LLM** (not a UI-only gate). Customers → public Support/Privacy/Legal only. General employees → + HR/Finance **policy**. HR staff → + employee records. Finance staff → + compensation/CTC. Denials logged to `access_denials` and shown to staff. Chat claims of authority never change role. | `prism/core/rbac.py`, `auth.py`, `retriever.py`, `agent.py` |
+| **Conflicting sources** | Prefer official PDF/DOCX (`source_priority=100`) over scraped HTML (10). Sort retrieved chunks by priority into the prompt; append a caveat naming the secondary Assist article. Users get one confident answer with a footnote — not a dump of two manuals. | `answer_polish.apply_source_priority_caveat`, warranty fixture `legal_warranty_fixture.jsonl` |
 | Authority spoof / policy override | Deterministic refuse on CFO-spoof + “override threshold to ₹0” (same path every time — not model-dependent) | `prism/core/text_utils.py`, `agent.py` |
 | Leave / Finance arithmetic | **Code computes** CL carry-forward, leave-year join-date math, and Finance §2.1 approval bands from a stated claim amount | `prism/core/policy_math.py` |
 | Water-conservation estimate | When a Customer Support answer is about a leak / drip / running toilet, append `sustainability_note` from EPA WaterSense / Fix-a-Leak published figures (31 L/day drip; 757 L/day running toilet). Never an LLM call; shown as a UI callout | `prism/core/water_math.py` |

@@ -61,6 +61,7 @@ class UploadedDocRef(BaseModel):
 
 class SessionState(BaseModel):
     session_id: str
+    user_id: str | None = None
     title: str | None = None
     turns: list[Turn] = Field(default_factory=list)
     active_domain: str | None = None
@@ -126,6 +127,7 @@ class SessionStore:
                 """
                 CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
+                    user_id TEXT,
                     title TEXT,
                     state_json TEXT NOT NULL,
                     created_at TEXT NOT NULL,
@@ -133,10 +135,14 @@ class SessionStore:
                 )
                 """
             )
+            # Migrate older DBs that lack user_id
+            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(sessions)").fetchall()}
+            if "user_id" not in cols:
+                self._conn.execute("ALTER TABLE sessions ADD COLUMN user_id TEXT")
 
-    def create(self) -> SessionState:
+    def create(self, user_id: str | None = None) -> SessionState:
         session_id = str(uuid.uuid4())
-        state = SessionState(session_id=session_id)
+        state = SessionState(session_id=session_id, user_id=user_id)
         self.save(state)
         return state
 
@@ -146,15 +152,17 @@ class SessionStore:
             try:
                 self._conn.execute(
                     """
-                    INSERT INTO sessions (id, title, state_json, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO sessions (id, user_id, title, state_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
+                        user_id=excluded.user_id,
                         title=excluded.title,
                         state_json=excluded.state_json,
                         updated_at=excluded.updated_at
                     """,
                     (
                         state.session_id,
+                        state.user_id,
                         state.title,
                         state.model_dump_json(),
                         state.created_at,
@@ -175,16 +183,48 @@ class SessionStore:
             return None
         return SessionState.model_validate_json(row[0])
 
-    def list_sessions(self) -> list[dict]:
+    def load_for_user(self, session_id: str, user_id: str) -> SessionState | None:
+        state = self.load(session_id)
+        if state is None:
+            return None
+        if state.user_id and state.user_id != user_id:
+            return None
+        # Legacy sessions without user_id: claim on first authenticated access
+        if not state.user_id:
+            state.user_id = user_id
+            self.save(state)
+        return state
+
+    def list_sessions(self, user_id: str | None = None) -> list[dict]:
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT id, title, created_at, updated_at, state_json FROM sessions ORDER BY updated_at DESC"
-            ).fetchall()
+            if user_id:
+                rows = self._conn.execute(
+                    """
+                    SELECT id, title, created_at, updated_at, state_json
+                    FROM sessions
+                    WHERE user_id = ? OR user_id IS NULL
+                    ORDER BY updated_at DESC
+                    """,
+                    (user_id,),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT id, title, created_at, updated_at, state_json FROM sessions ORDER BY updated_at DESC"
+                ).fetchall()
         out = []
         for r in rows:
             active_domain = None
             try:
-                active_domain = SessionState.model_validate_json(r[4]).active_domain
+                st = SessionState.model_validate_json(r[4])
+                active_domain = st.active_domain
+                # Only list legacy null-user sessions to the requesting user once claimed,
+                # or if they already belong to them. Filter orphaned nulls out of other users'
+                # views by requiring match when user_id is set on the row via state.
+                if user_id and st.user_id and st.user_id != user_id:
+                    continue
+                if user_id and not st.user_id:
+                    # Don't show unclaimed legacy sessions in the sidebar — avoids cross-user leak.
+                    continue
             except Exception:
                 pass
             out.append(

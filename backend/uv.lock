@@ -2120,6 +2120,7 @@ name = "prism"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "bcrypt" },
     { name = "beautifulsoup4" },
     { name = "chromadb" },
     { name = "curl-cffi" },
@@ -2153,6 +2154,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "bcrypt", specifier = ">=4.1" },
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "chromadb", specifier = ">=0.5" },
     { name = "curl-cffi", specifier = ">=0.7" },

@@ -1,0 +1,17 @@
+flowchart TD
+    User["User"] --> UI["React + Vite UI"]
+    UI -->|"HTTP :8000"| API["FastAPI"]
+    API --> Guards["Guards: jailbreak / policy-tamper / CFO-override"]
+    Guards --> PolicyMath["Deterministic policy_math? leave CapEx approval bands"]
+    PolicyMath -->|"yes"| Answer["CanonicalAnswer"]
+    PolicyMath -->|"no"| UploadGate["Attached file relevant?"]
+    UploadGate -->|"yes"| UploadRetrieve["Session Chroma prism_uploads"]
+    UploadGate -->|"no"| Router["Domain router: anchors + hit votes no LLM"]
+    Router --> Retrieve["Hybrid retrieve: Chroma dense + BM25 to RRF"]
+    UploadRetrieve --> Generate
+    Retrieve --> Confident{"Confident?"}
+    Confident -->|"no"| NoAnswer["Honest no-answer"]
+    Confident -->|"yes"| Generate["One Ollama call: qwen2.5:7b to CanonicalAnswer JSON"]
+    Generate --> Answer
+    Answer --> Renderers["Renderers: prose / JSON / XML / Excel / email"]
+    Renderers --> UI

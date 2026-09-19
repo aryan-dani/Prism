@@ -47,7 +47,7 @@ def eval_single_turn(records: list[dict]) -> dict:
         t0 = time.monotonic()
 
         query_embedding = embed_one(query)
-        agnostic = retrieve(query, domain=None, top_k=10).chunks
+        agnostic = retrieve(query, role="general_employee", domain=None, top_k=10).chunks
         votes = score_by_hit_votes(agnostic)
         route_result = route(query_embedding, hit_votes=votes)
         latencies.append(time.monotonic() - t0)
