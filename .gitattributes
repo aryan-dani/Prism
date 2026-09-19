@@ -1,0 +1,14 @@
+# Force binary handling so Windows CRLF conversion never touches these --
+# Git's autocrlf heuristic usually detects binaries correctly on its own,
+# but the submission PDFs/screenshots are important enough to not leave to
+# heuristics.
+*.pdf -text binary
+*.png -text binary
+*.jpg -text binary
+*.jpeg -text binary
+*.ico -text binary
+*.ttf -text binary
+*.xlsx -text binary
+*.db -text binary
+*.sqlite3 -text binary
+*.bin -text binary

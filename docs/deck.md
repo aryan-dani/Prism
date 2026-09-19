@@ -1,9 +1,3 @@
-# Prism — Presentation Deck (max 4 slides)
-
-Copy each slide into PowerPoint / Google Slides / Canva. Keep to **four slides**. Export PDF for the repo.
-
----
-
 ## Slide 1 — Approach & Pitch
 
 **Title:** Prism — One query, any format  
@@ -13,6 +7,8 @@ Copy each slide into PowerPoint / Google Slides / Canva. Keep to **four slides**
 - **3 real / 2 synthetic** knowledge sources — real public Kohler Support/Privacy/Legal; synthetic Meridian Fixtures HR & Finance (disclosed)
 - Innovation beats: **non-LLM domain routing**, **canonical answer → five renderers**, **ephemeral local uploads**, **honest no-answer**
 - Aligns with Kohler design excellence & operational efficiency: one agent, less tool sprawl, grounded answers, data stays on-device
+
+<img src="docs/assets/screenshot_chat.png" width="420" alt="Prism chat: exact ₹25,001 vs ₹24,999 approval-band boundary, with domain chip, confidence, sources, and format bar" />
 
 ---
 
@@ -58,5 +54,7 @@ User → FastAPI + React
 | API / UI | FastAPI · React + Vite · landing + format bar |
 
 Constraint-driven: no multi-LLM routing, no cloud, reformats cost $0 LLM.
+
+<img src="docs/assets/screenshot_landing.png" width="520" alt="Prism landing page: five domains plus your uploaded file, how-it-works, curated example questions" />
 
 **Ask:** Prism as the internal+external knowledge front door — five domains, one upload, any format, on-device.

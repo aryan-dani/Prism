@@ -6,6 +6,10 @@
 
 Built for the Kohler-MITWPU AI Research Lab case study challenge (individual submission). Runs fully offline via [Ollama](https://ollama.com/) on a laptop with an RTX 5070 (8GB VRAM).
 
+![Prism landing page — five domains plus your uploaded file, how-it-works, curated example questions](docs/assets/screenshot_landing.png)
+
+![Prism chat — exact ₹25,001 vs ₹24,999 approval-band boundary, with domain chip, confidence, sources, and format bar](docs/assets/screenshot_chat.png)
+
 ---
 
 ## What it does
@@ -123,7 +127,7 @@ Qwen3 matches quality on this slice but is ~3× slower and uses more VRAM — de
 
 Routing-only eval (40 questions): **92.1%** domain accuracy · **100%** hit@5 · ~76ms avg
 
-**Adversarial stress harness (35 cases):** **30 PASS · 2 PARTIAL · 0 FAIL · 3 NEEDS_HUMAN_REVIEW** — see [`backend/eval/results/stress/LATEST_REPORT.md`](backend/eval/results/stress/LATEST_REPORT.md)
+**Adversarial stress harness (39 cases, 13 categories):** **39 PASS · 0 PARTIAL · 0 FAIL · 0 NEEDS_HUMAN_REVIEW** — see [`backend/eval/results/stress/LATEST_REPORT.md`](backend/eval/results/stress/LATEST_REPORT.md). Covers numeric-boundary exactness, cross-domain multi-hop, silent domain switching, ambiguity/clarification, 12-turn memory, hallucination/honesty probes, jailbreak/prompt-injection/policy-tamper adversarial cases (including paraphrased variants), output-format consistency, cross-session consistency, citation-domain integrity, session UX, and a 20-turn latency/perf sweep.
 
 ---
 
@@ -142,9 +146,9 @@ HR/Finance are synthetic because no real internal Kohler manuals are public. Tha
 ### Known limitations
 
 - Expense **approval bands are by claim amount, not grade**. “If I get promoted, what’s my new expense limit?” is still the same ₹5k / ₹25k / ₹1L table unless the user also states a rupee amount.
-- **Anaphora + topic pivot** (“…is that under warranty?” after a leak fix) is improved by a follow-up retrieval pass, but the 7B model can still linger on the previous troubleshooting steps on a slow/hot GPU.
 - **Upload vs KB**: implicit questions only go to an attached file when the file is a closer dense match than the five KBs. Say “this document…” (or the filename) to force the upload path.
-- **Latency** on a 20-turn session can climb when VRAM is already full (Cursor + three Ollama models). Demo on a quiet GPU.
+- **Latency scales with GPU contention.** On an 8GB laptop GPU, all three Ollama models (7B generation + 3B titler + embedder) plus whatever else is drawing VRAM (this repo was built inside Cursor, which itself competes for the same GPU) leave little headroom for the KV cache on longer, multi-turn conversations — single-turn latency measured 2-15s with the GPU free vs. 40-90s under real contention on this dev box. The title model now unloads immediately after each use (`OLLAMA_TITLE_KEEP_ALIVE=0`) to claw back ~2GB, and a bounded request timeout (`PRISM_OLLAMA_TIMEOUT_S`) turns a genuine stall into an honest "please retry" instead of a hung request — but for a live demo, close other GPU-heavy apps first.
+- **Privacy KB spans multiple jurisdictions** (US state law, Canada/PIPEDA, Brazil/LGPD, EU) with very similar boilerplate "your rights" language — dense retrieval alone can land two countries within ~0.02 cosine distance of each other. Prism filters out chunks from a *different* named jurisdiction once the query clearly states one (see `filter_cross_jurisdiction_chunks`), but the literal acronym "CCPA" never appears on Kohler's real public privacy page — California rights are described under "Shine the Light" / state-privacy-rights language instead, so an eval expecting that exact acronym will legitimately miss even though the underlying rights are covered.
 - Customer Support / Privacy / Legal are **public Kohler pages**, not internal ticketing or employee PII stores.
 
 ---
@@ -186,7 +190,7 @@ Prism/
 │   ├── pyproject.toml
 │   └── uv.lock
 ├── references/          # Non-ingested structural refs (HR templates, AFOA finance PDF)
-├── docs/                # decisions, prompts, deck, demo script + pdf/
+├── docs/                # decisions, prompts, deck, demo script + pdf/ + assets/ (screenshots)
 ├── scripts/             # setup.ps1, start.ps1, pull_models.ps1, export_pdfs.py
 ├── start.ps1            # thin wrapper → scripts/start.ps1
 └── README.md
@@ -271,7 +275,9 @@ Academic use only — read-only crawl for this case study; do not republish the 
 | `PRISM_GEN_MODEL` | `qwen2.5:7b-instruct` | Answer generation |
 | `PRISM_EMBED_MODEL` | `nomic-embed-text` | Embeddings / routing |
 | `PRISM_TITLE_MODEL` | `qwen2.5:3b-instruct` | Session titles |
-| `PRISM_OLLAMA_KEEP_ALIVE` | `25m` | Keep Ollama models warm between turns (`-1` = forever) |
+| `PRISM_OLLAMA_KEEP_ALIVE` | `25m` | Keep the 7B/embed models warm between turns (`-1` = forever) |
+| `PRISM_OLLAMA_TITLE_KEEP_ALIVE` | `0` | Title model (3B) keep-alive — unloads immediately after each use to free VRAM for the 7B model's KV cache on tight 8GB cards |
+| `PRISM_OLLAMA_TIMEOUT_S` | `150` | Hard ceiling on a single Ollama call; a stall past this returns an honest no-answer instead of hanging the request |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama endpoint |
 
 ---
