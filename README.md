@@ -2,7 +2,9 @@
 
 **Kohler Unified Enterprise AI Agent** · Track 3 · Kohler-MITWPU AI Research Lab
 
-One query, any format: a local conversational agent across five enterprise domains, plus the file you drop in chat. Runs fully offline via [Ollama](https://ollama.com/) on a laptop with an RTX 5070 (8 GB VRAM). Individual submission.
+Built by **Aryan Dani**. Individual submission.
+
+One query, any format: a local conversational agent across five enterprise domains, plus the file you drop in chat. Runs fully offline via [Ollama](https://ollama.com/) on a laptop with an RTX 5070 (8 GB VRAM).
 
 ## Start here
 
@@ -67,8 +69,8 @@ cd ..
 ollama pull nomic-embed-text
 ollama pull qwen2.5:7b-instruct      # generation (default after bench)
 ollama pull qwen2.5:3b-instruct      # session titles only
-# optional candidates: qwen3:8b, llama3.1:8b-instruct-q4_K_M, mistral:7b-instruct
 # or: powershell -File scripts/pull_models.ps1
+# bench candidates: powershell -File scripts/pull_models.ps1 -All
 
 cd frontend
 npm install
@@ -130,7 +132,7 @@ uv run python -m prism.ingest.upsert --file eval/fixtures/k_3901_warranty.pdf --
 |---|---|---|
 | **Generation** | `qwen2.5:7b-instruct` (Q4) | Best Finance exactness + lowest latency in local bench |
 | **Embeddings** | `nomic-embed-text` (~274 MB) | Tiny footprint so the 7B model keeps most of VRAM |
-| **Titles** | `qwen2.5:3b-instruct` | Cheap one-shot session naming |
+| **Titles** | Deterministic phrase table | No extra LLM. The 3B model is still pulled so health stays green. |
 | **Vector store** | Embedded Chroma + BM25 sidecar | No separate server; one tagged collection for all domains |
 | **Routing** | Embedding anchors + hit votes | **No LLM call** just to pick a domain |
 | **Agent** | Hand-rolled Python state machine | Explicit, debuggable. No LangGraph/LlamaIndex overhead. |
@@ -213,7 +215,7 @@ Prism/
 │   ├── pdf/deck.pdf           # jury presentation (start here)
 │   ├── pdf/system_guide.pdf   # long-form handbook
 │   ├── pdf/prompts.pdf        # prompt + workflow inventory
-│   └── assets/                # screenshots used by the deck and README
+│   └── assets/                # screenshots + prism_demo.mp4 (jury video)
 ├── scripts/             # setup/start/pull/rebuild + export_deck.py, export_system_guide.py, export_prompts.py
 ├── start.ps1            # thin wrapper → scripts/start.ps1
 └── README.md
@@ -253,21 +255,30 @@ Validation reports: [`backend/eval/results/validation_summary.md`](backend/eval/
 
 ## Submission deliverables
 
+Official email packet:
+
 | Requirement | Location |
 |---|---|
-| **Presentation (primary)** | [`docs/pdf/deck.pdf`](docs/pdf/deck.pdf) |
-| **System handbook** | [`docs/pdf/system_guide.pdf`](docs/pdf/system_guide.pdf) |
+| **Presentation** | [`docs/pdf/deck.pdf`](docs/pdf/deck.pdf) (10 landscape slides) |
 | **Prompts (brief requirement)** | [`docs/pdf/prompts.pdf`](docs/pdf/prompts.pdf) |
 | Working prototype | This repo. See Quick start. |
+| Demo video (~3 min) | Embedded file: [`docs/assets/prism_demo.mp4`](docs/assets/prism_demo.mp4) |
+
+Supplementary (not required by the brief):
+
+| Document | Location |
+|---|---|
+| System handbook | [`docs/pdf/system_guide.pdf`](docs/pdf/system_guide.pdf) |
 | Architecture overview | [`docs/architecture.md`](docs/architecture.md) · [`docs/pdf/architecture.pdf`](docs/pdf/architecture.pdf) |
 | Architecture decisions | [`docs/decisions.md`](docs/decisions.md) · [`docs/pdf/decisions.pdf`](docs/pdf/decisions.pdf) |
-| Demo video (1-3 min) | Script: [`docs/demo_script.md`](docs/demo_script.md). *Add the upload link here after recording.* |
 
 ### Demo video
 
-> **TODO:** paste unlisted YouTube / Drive link after recording.
+Embedded file (the brief allows a link or a file): [`docs/assets/prism_demo.mp4`](docs/assets/prism_demo.mp4)
 
-Suggested flow (from `docs/demo_script.md`): Finance ₹15,000 approval exactness → domain-switch to toilet troubleshooting → anaphora follow-up → clarification moment → Prose → JSON → XML → Excel → Email from one answer.
+1920×1080, 3:26, voiced walkthrough. Login as Alex, landing stats (5 domains / 39 of 39 / 8 GB / 0 cloud), Orion upload (INR 45,000), Finance ₹15,000 policy math, JSON / XML / Excel / Email from one answer, Support water callout, warranty follow-up.
+
+Cue sheet: [`docs/demo_voiceover.md`](docs/demo_voiceover.md)
 
 ---
 
@@ -295,7 +306,7 @@ Academic use only. Read-only crawl for this case study. Do not republish the scr
 |---|---|---|
 | `PRISM_GEN_MODEL` | `qwen2.5:7b-instruct` | Answer generation |
 | `PRISM_EMBED_MODEL` | `nomic-embed-text` | Embeddings / routing |
-| `PRISM_TITLE_MODEL` | `qwen2.5:3b-instruct` | Session titles |
+| `PRISM_TITLE_MODEL` | `qwen2.5:3b-instruct` | Legacy. Titles are a phrase table, not this model. |
 | `PRISM_OLLAMA_KEEP_ALIVE` | `25m` | Keep the 7B/embed models warm between turns (`-1` = forever) |
 | `PRISM_OLLAMA_TITLE_KEEP_ALIVE` | `0` | Title model (3B) keep-alive. Unloads immediately after each use to free VRAM. |
 | `PRISM_OLLAMA_TIMEOUT_S` | `150` | Hard ceiling on a single Ollama call. A stall past this returns an honest no-answer. |
@@ -305,4 +316,4 @@ Academic use only. Read-only crawl for this case study. Do not republish the scr
 
 ## License / academic note
 
-Submitted as an individual academic case-study prototype for the Kohler-MITWPU AI Research Lab. Kohler Assist / kohler.com content was scraped read-only under robots.txt and rate limits for this submission only, not for redistribution or commercial reuse. Synthetic HR and Finance policies are original student work, clearly disclosed as fictional.
+Submitted by **Aryan Dani** as an individual academic case-study prototype for the Kohler-MITWPU AI Research Lab. Kohler Assist / kohler.com content was scraped read-only under robots.txt and rate limits for this submission only, not for redistribution or commercial reuse. Synthetic HR and Finance policies are original student work, clearly disclosed as fictional.

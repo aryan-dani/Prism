@@ -16,7 +16,10 @@ $required = @(
     "legal_from_assist.jsonl",
     "legal_from_kohler.jsonl",
     "hr.jsonl",
-    "finance.jsonl"
+    "finance.jsonl",
+    "hr_records.jsonl",
+    "finance_compensation.jsonl",
+    "legal_warranty_fixture.jsonl"
 )
 
 Write-Host "==> Checking required processed JSONL files" -ForegroundColor Cyan

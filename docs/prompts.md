@@ -47,16 +47,16 @@ Runtime strings in chapters 6 and 7 are pulled from the Python modules at export
 
 Track 3 asks for an enterprise conversational agent across **internal and external** domains, with **dynamic output formatting** (JSON, Excel, XML, draft email) on demand.
 
-Kohler-MITWPU scoring, as I treated it while building:
+Official Kohler-MITWPU weights, and how they shaped Prism:
 
-| Weight | What the jury is buying |
-|---|---|
-| 45 | Quality of the working prototype |
-| 25 | Architecture and engineering judgment |
-| 20 | Evaluation honesty |
-| 10 | Presentation |
+| Weight | Official criterion | What I built toward |
+|---|---|---|
+| 45 | Approach & Innovation | One front door + one `CanonicalAnswer` object, five skins. Non-LLM gates before the 7B. Reconstructed builder briefs in chapter 4. |
+| 25 | Technical Execution | Hybrid retrieve with `role_*` ACL, `policy_math` for INR bands, a stress harness a juror can re-run. |
+| 20 | User Experience & Feasibility | Clone-and-run on 8 GB VRAM, format bar, voice, cited sources, workflow chips. |
+| 10 | Business & Sustainability | On-device (uploads never leave the laptop), one knowledge front door instead of five tools, EPA liters/day callout on leak/drip Support answers. |
 
-Those weights decided the product, not a slogan. A pretty chat UI without `role_*` on retrieve, or a leaderboard number the jury cannot re-run, would lose the 25 and the 20. Formats that re-ask the 7B would lose the 8 GB story.
+Those weights decided the product, not a slogan. A pretty chat UI without `role_*` on retrieve would lose the 25. Formats that re-ask the 7B would lose the 8 GB feasibility story. Skipping the water callout would leave the 10 empty.
 
 Two pillars I locked on day one:
 

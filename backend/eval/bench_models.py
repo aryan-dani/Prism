@@ -152,7 +152,7 @@ def main() -> None:
         try:
             results.append(bench_model(model, questions))
         except Exception as e:
-            print(f"Skipping {model}: {e} (likely not pulled yet -- run scripts/pull_models.ps1)")
+            print(f"Skipping {model}: {e} (likely not pulled yet -- run scripts/pull_models.ps1 -All)")
             results.append({"model": model, "error": str(e)})
 
     with (RESULTS_DIR / "model_bench.json").open("w", encoding="utf-8") as f:

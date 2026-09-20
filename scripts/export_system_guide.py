@@ -551,7 +551,7 @@ def _cover_and_toc(html: str) -> str:
 <div class="cover">
   <p class="kicker">Kohler-MITWPU · Track 3 · Interview handbook</p>
   <h1>Prism System Handbook</h1>
-  <p class="lede">From the case-study brief to every subsystem, with a concrete query and what Prism actually says or does. Teaching pass, not the 4-slide jury pitch.</p>
+  <p class="lede">From the case-study brief to every subsystem, with a concrete query and what Prism actually says or does. Teaching pass, not the 10-slide jury pitch.</p>
   <div class="pills">
     <span class="pill">Five domains + uploads</span>
     <span class="pill">CanonicalAnswer to five formats</span>

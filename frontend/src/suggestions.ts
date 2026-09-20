@@ -3,7 +3,7 @@ export type SuggestedQuestion = {
   domain: string
 }
 
-/** Curated empty-state / landing prompts — chosen because they hit deterministic
+/** Curated empty-state / landing prompts. Chosen because they hit deterministic
  *  or well-covered paths (policy_math, Assist leak article, privacy policy, table). */
 export const SUGGESTIONS: SuggestedQuestion[] = [
   {
@@ -16,7 +16,7 @@ export const SUGGESTIONS: SuggestedQuestion[] = [
   },
   {
     domain: 'customer_support',
-    text: 'My toilet is occasionally leaking or running — what should I check?',
+    text: 'My toilet is occasionally leaking or running. What should I check?',
   },
   {
     domain: 'privacy',
@@ -31,7 +31,7 @@ export const SUGGESTIONS: SuggestedQuestion[] = [
 export const CUSTOMER_SUGGESTIONS: SuggestedQuestion[] = [
   {
     domain: 'customer_support',
-    text: 'My toilet is occasionally leaking or running — what should I check?',
+    text: 'My toilet is occasionally leaking or running. What should I check?',
   },
   {
     domain: 'privacy',
@@ -73,4 +73,4 @@ export function suggestionsForRole(role: string): SuggestedQuestion[] {
 }
 
 export const SUGGESTION_HINT =
-  'After an answer, switch formats with the Prose / JSON / XML / Excel / Email bar — or attach a policy PDF to this chat.'
+  'After an answer, switch formats with the Prose / JSON / XML / Excel / Email bar, or attach a policy PDF to this chat.'

@@ -18,6 +18,8 @@ import {
   type SessionSummary,
   type UploadedDoc,
 } from './api'
+import AnswerBody from './AnswerBody'
+import FormatPanel from './FormatPanel'
 import { SUGGESTION_HINT, suggestionsForRole } from './suggestions'
 import './index.css'
 
@@ -77,6 +79,7 @@ function getSpeechRecognitionCtor(): (new () => SpeechRecognitionLike) | null {
 type SpeechRecognitionLike = {
   continuous: boolean
   interimResults: boolean
+  maxAlternatives: number
   lang: string
   onresult: ((ev: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null
   onerror: ((ev: { error?: string }) => void) | null
@@ -92,8 +95,14 @@ function uid() {
 
 function domainLabel(d: string | null | undefined): string {
   if (!d) return ''
-  if (d === 'uploaded') return 'uploaded doc'
+  if (d === 'uploaded') return 'Upload'
+  if (d === 'customer_support') return 'Support'
   return d.replaceAll('_', ' ')
+}
+
+function DomainPip({ domain }: { domain?: string | null }) {
+  const key = domain || 'none'
+  return <span className={`domain-pip domain-${key}`} aria-hidden />
 }
 
 function formatBytes(n?: number): string {
@@ -105,13 +114,22 @@ function formatBytes(n?: number): string {
 
 /** Keep sidebar/topbar titles human-readable when the titler returns junk. */
 function displayTitle(raw: string | null | undefined, fallback = 'Untitled chat'): string {
-  const t = (raw ?? '').trim()
+  let t = (raw ?? '').trim()
   if (!t) return fallback
   if (t.startsWith('{') || t.startsWith('[') || t.includes('"entitlement') || t.includes('"risk_level"')) {
     return 'Structured answer request'
   }
-  if (/generate short descriptive/i.test(t) || /chat titles/i.test(t)) {
-    return 'New conversation'
+  if (
+    /generate short descriptive/i.test(t) ||
+    /chat titles/i.test(t) ||
+    /provide (a )?summary/i.test(t) ||
+    /user request/i.test(t) ||
+    /not enough info/i.test(t)
+  ) {
+    return fallback
+  }
+  if (!t.includes(' ') && (t.match(/[A-Z]/g)?.length ?? 0) >= 3) {
+    t = t.replace(/([a-z])([A-Z])/g, '$1 $2')
   }
   if (t.length > 72) return `${t.slice(0, 69)}…`
   return t
@@ -154,19 +172,34 @@ function confidenceTone(confidence?: string | null): string {
   }
 }
 
+function tidyTranscript(text: string): string {
+  const squeezed = text.replace(/\s+/g, ' ').trim()
+  if (!squeezed) return ''
+  const sentences = squeezed.split(/(?<=[.!?])\s+/).filter(Boolean)
+  const out: string[] = []
+  for (const raw of sentences) {
+    const s = raw.trim()
+    const prev = out[out.length - 1]
+    const norm = (v: string) => v.toLowerCase().replace(/[.!?]+$/g, '').trim()
+    if (prev && norm(prev) === norm(s)) continue
+    out.push(s)
+  }
+  return out.join(' ').replace(/\b(\w+)(?:\s+\1){1,}\b/gi, '$1')
+}
+
 function AnswerStateBanner({ m }: { m: Message }) {
   if (m.role !== 'assistant') return null
   if (m.isClarification) {
     return (
       <div className="answer-banner clarify-banner" role="status">
-        Clarification needed — pick a domain or rephrase so Prism can route correctly.
+        Clarification needed. Pick a domain or rephrase so Prism can route correctly.
       </div>
     )
   }
   if (m.noAnswer) {
     return (
       <div className="answer-banner honesty-banner" role="status">
-        No confident match in the knowledge base — refusing to invent an answer.
+        No confident match in the knowledge base. Refusing to invent an answer.
       </div>
     )
   }
@@ -274,7 +307,7 @@ export default function App({
       if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== 'k') return
       const target = e.target as HTMLElement | null
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
-        // Still allow Ctrl/Cmd+K from composer — it's the new-chat shortcut.
+        // Still allow Ctrl/Cmd+K from composer. It is the new-chat shortcut.
       }
       e.preventDefault()
       void startNewChat()
@@ -306,7 +339,7 @@ export default function App({
         onAuthLost?.()
         return
       }
-      setStatus(`API offline — start backend: uv run uvicorn prism.api.main:app --port 8000`)
+      setStatus(`API offline. Start backend: uv run uvicorn prism.api.main:app --port 8000`)
       console.error(err)
     }
   }
@@ -380,7 +413,7 @@ export default function App({
     try {
       const res = await deleteUpload(activeId, docId)
       setUploads(res.uploaded_docs)
-      setStatus('Removed attached document — its vectors were purged')
+      setStatus('Removed attached document. Its vectors were purged.')
     } catch (err) {
       setStatus(err instanceof Error ? err.message : 'Failed to remove document')
     }
@@ -432,6 +465,11 @@ export default function App({
         },
       ])
       setFormats(res.available_formats.length ? res.available_formats : ['prose'])
+      if (res.title) {
+        setSessions((prev) =>
+          prev.map((s) => (s.id === activeId ? { ...s, title: res.title } : s)),
+        )
+      }
       await refreshSessions()
       const wf = workflowLabel(res.workflow)
       setStatus(
@@ -454,6 +492,15 @@ export default function App({
 
   async function onFormat(format: string) {
     if (!activeId || busy) return
+    if (format === 'prose') {
+      setPanel(null)
+      setStatus('Showing prose answer')
+      return
+    }
+    if (panel?.format === format && format !== 'excel') {
+      setPanel(null)
+      return
+    }
     if (format === 'excel') {
       try {
         const blob = await downloadExcelBlob(activeId)
@@ -463,6 +510,7 @@ export default function App({
         a.download = 'prism_answer.xlsx'
         a.click()
         URL.revokeObjectURL(url)
+        setPanel({ format: 'excel', content: 'prism_answer.xlsx' })
         setStatus('Downloaded Excel')
       } catch (err) {
         if (err instanceof AuthError) onAuthLost?.()
@@ -481,6 +529,7 @@ export default function App({
         a.download = res.filename
         a.click()
         URL.revokeObjectURL(url)
+        setPanel({ format: res.format, content: res.filename })
       } else {
         setPanel({ format: res.format, content: String(res.content) })
       }
@@ -502,7 +551,7 @@ export default function App({
       setStatus('Answer copied')
       window.setTimeout(() => setCopiedId((id) => (id === m.id ? null : id)), 1600)
     } catch {
-      setStatus('Copy failed — clipboard permission denied')
+      setStatus('Copy failed. Clipboard permission denied.')
     }
   }
 
@@ -515,7 +564,7 @@ export default function App({
 
   function speakAnswer(m: Message) {
     if (!ttsSupported) {
-      setStatus('Text-to-speech not supported in this browser — try Chrome or Edge')
+      setStatus('Text-to-speech not supported in this browser. Try Chrome or Edge.')
       return
     }
     if (speakingId === m.id) {
@@ -536,7 +585,7 @@ export default function App({
   function toggleMic() {
     const Ctor = getSpeechRecognitionCtor()
     if (!Ctor) {
-      setStatus('Voice input not supported here — use Chrome or Edge')
+      setStatus('Voice input not supported here. Use Chrome or Edge.')
       return
     }
     if (listening && recognitionRef.current) {
@@ -549,21 +598,23 @@ export default function App({
     recognitionRef.current = rec
     rec.continuous = true
     rec.interimResults = true
+    rec.maxAlternatives = 1
     rec.lang = 'en-IN'
     rec.onresult = (ev) => {
-      let finalChunk = ''
+      let spoken = ''
       let interim = ''
       for (let i = 0; i < ev.results.length; i++) {
-        const piece = ev.results[i][0].transcript
-        if (ev.results[i].isFinal) finalChunk += piece
-        else interim += piece
+        const piece = ev.results[i][0]?.transcript?.trim() ?? ''
+        if (!piece) continue
+        if (ev.results[i].isFinal) spoken = spoken ? `${spoken} ${piece}` : piece
+        else interim = interim ? `${interim} ${piece}` : piece
       }
-      const base = draftBaseRef.current
-      const combined = [base, finalChunk, interim].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
+      const combined = [draftBaseRef.current, tidyTranscript(spoken), interim]
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim()
       setDraft(combined)
-      if (finalChunk) {
-        draftBaseRef.current = [base, finalChunk].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim()
-      }
     }
     rec.onerror = (ev) => {
       setListening(false)
@@ -624,7 +675,10 @@ export default function App({
                   onClick={() => void selectSession(s.id)}
                 >
                   <div className="session-title">{displayTitle(s.title)}</div>
-                  <div className="session-meta">{domainLabel(s.active_domain) || 'no domain yet'}</div>
+                  <div className="session-meta">
+                    <DomainPip domain={s.active_domain} />
+                    {domainLabel(s.active_domain) || 'New'}
+                  </div>
                 </button>
                 <button
                   type="button"
@@ -646,8 +700,13 @@ export default function App({
                 {health.chunks_indexed} chunks · {health.gen_model}
               </div>
               <div className={`health-pill ${health.status === 'ok' ? 'ok' : 'degraded'}`}>
-                API {health.status}
-                {health.ollama && !health.ollama.ok ? ' · Ollama incomplete' : ''}
+                {health.status === 'ok'
+                  ? 'API ok'
+                  : !health.ollama?.reachable
+                    ? 'Ollama not running'
+                    : health.ollama?.models_missing?.length
+                      ? `Ollama missing ${health.ollama.models_missing[0]}`
+                      : 'API degraded'}
               </div>
             </>
           )}
@@ -697,10 +756,8 @@ export default function App({
             <div className="empty">
               <h2>One query, any format</h2>
               <p>
-                Prism reasons across HR, Finance, Customer Support, Privacy, and Legal — then re-renders the same
-                answer as prose, JSON, XML, Excel, or a draft email. Drop a file to add a session-only sixth domain.
-                Use the mic to dictate, and Speak on answers. Every reply cites sources and the workflow in{' '}
-                <code>docs/prompts.md</code>.
+                Ask across five domains, or drop a file. Same answer as prose, JSON, XML, Excel, or email.
+                Every reply cites sources and the workflow id.
               </p>
               <div className="suggestions">
                 {emptySuggestions.map((s) => (
@@ -726,9 +783,17 @@ export default function App({
                   .join(' ')}
               >
                 <AnswerStateBanner m={m} />
-                {m.sustainabilityNote
-                  ? m.content.replace(m.sustainabilityNote, '').trim()
-                  : m.content}
+                {m.role === 'assistant' ? (
+                  <AnswerBody
+                    text={
+                      m.sustainabilityNote
+                        ? m.content.replace(m.sustainabilityNote, '').trim()
+                        : m.content
+                    }
+                  />
+                ) : (
+                  m.content
+                )}
                 {m.sustainabilityNote && (
                   <div className="water-callout" role="note">
                     <strong>Water conservation</strong>
@@ -782,7 +847,7 @@ export default function App({
                       <div className="sources">
                         <div className="sources-label">Sources</div>
                         <ul className="sources-list">
-                          {(showAllSources[m.id] ? m.sources : m.sources.slice(0, 6)).map((s) => (
+                          {(showAllSources[m.id] ? m.sources : m.sources.slice(0, 3)).map((s) => (
                             <li key={s.id}>
                               {s.domain ? (
                                 <span className="source-domain">{domainLabel(s.domain)}</span>
@@ -797,7 +862,7 @@ export default function App({
                             </li>
                           ))}
                         </ul>
-                        {m.sources.length > 6 && (
+                        {m.sources.length > 3 && (
                           <button
                             type="button"
                             className="sources-more"
@@ -824,11 +889,7 @@ export default function App({
             ))
           )}
           {panel && (
-            <div className="panel">
-              <strong>{panel.format.toUpperCase()}</strong>
-              {'\n'}
-              {panel.content}
-            </div>
+            <FormatPanel format={panel.format} content={panel.content} onClose={() => setPanel(null)} />
           )}
           <div ref={bottomRef} />
         </section>
@@ -874,8 +935,11 @@ export default function App({
               <button
                 key={fmt.id}
                 type="button"
-                className={`format-btn format-${fmt.id}`}
+                className={`format-btn format-${fmt.id}${
+                  (fmt.id === 'prose' && !panel) || panel?.format === fmt.id ? ' is-active' : ''
+                }`}
                 disabled={busy || messages.length === 0 || !formats.includes(fmt.id)}
+                aria-pressed={(fmt.id === 'prose' && !panel) || panel?.format === fmt.id}
                 onClick={() => void onFormat(fmt.id)}
               >
                 {fmt.label}
@@ -883,7 +947,7 @@ export default function App({
             ))}
           </div>
           <form
-            className="composer"
+            className={`composer${listening ? ' is-listening' : ''}`}
             onSubmit={(e) => {
               e.preventDefault()
               void sendMessage(draft)
@@ -899,35 +963,27 @@ export default function App({
             />
             <button
               type="button"
-              className="attach"
-              title="Attach a document (PDF, DOCX, TXT, MD, CSV) — indexed locally for this chat only"
+              className="icon-btn attach"
+              title="Attach a document for this chat only"
               aria-label="Attach document"
               disabled={busy || uploading || !activeId}
               onClick={() => fileInputRef.current?.click()}
             >
-              {uploading ? '…' : '+'}
+              {uploading ? '…' : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                  <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              )}
             </button>
-            {speechSupported && (
-              <button
-                type="button"
-                className={`mic-btn${listening ? ' listening' : ''}`}
-                title={listening ? 'Stop listening' : 'Dictate with microphone'}
-                aria-label={listening ? 'Stop listening' : 'Dictate with microphone'}
-                aria-pressed={listening}
-                disabled={busy || !activeId}
-                onClick={() => toggleMic()}
-              >
-                {listening ? '●' : 'Mic'}
-              </button>
-            )}
             <textarea
+              rows={1}
               value={draft}
               placeholder={
                 listening
                   ? 'Listening…'
                   : uploads.length
-                    ? 'Ask about the attached document — or anything across the five domains…'
-                    : 'Ask about leave policy, expense approvals, toilet troubleshooting, privacy, warranties… or drop a file'
+                    ? 'Ask about the attached file, or anything across the five domains'
+                    : 'Ask about leave, expenses, warranties, privacy… or drop a file'
               }
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -941,20 +997,43 @@ export default function App({
                 }
               }}
             />
-            <button className="send" type="submit" disabled={busy || !draft.trim()}>
-              {busy ? '…' : 'Send'}
-            </button>
+            <div className="composer-actions">
+              {speechSupported && (
+                <button
+                  type="button"
+                  className={`icon-btn mic-btn${listening ? ' listening' : ''}`}
+                  title={listening ? 'Stop listening' : 'Dictate with microphone'}
+                  aria-label={listening ? 'Stop listening' : 'Dictate with microphone'}
+                  aria-pressed={listening}
+                  disabled={busy || !activeId}
+                  onClick={() => toggleMic()}
+                >
+                  {listening ? (
+                    <span className="mic-dot" aria-hidden />
+                  ) : (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+                      <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="2" />
+                      <path d="M6 11a6 6 0 0 0 12 0M12 17v3M9 20h6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  )}
+                </button>
+              )}
+              <button className="send" type="submit" disabled={busy || !draft.trim()}>
+                Send
+              </button>
+            </div>
           </form>
           <div className="status-line">
-            {status}
-            {speechSupported || ttsSupported ? (
-              <span className="voice-hint">
-                {' · '}
-                Voice: {speechSupported ? 'mic' : 'no mic'}
-                {ttsSupported ? ' + speak' : ''}
-                {' '}(Chrome/Edge)
-              </span>
-            ) : null}
+            {listening ? (
+              <span className="listening-hint">Listening. Click the mic to stop, or press Send.</span>
+            ) : (
+              <>
+                {status ? <span>{status}</span> : null}
+                {!status && (speechSupported || ttsSupported) ? (
+                  <span className="voice-hint">Voice in Chrome or Edge</span>
+                ) : null}
+              </>
+            )}
           </div>
         </div>
       </main>

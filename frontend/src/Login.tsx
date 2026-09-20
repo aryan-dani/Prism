@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getDemoUsers, login, type DemoUsersResponse } from './api'
 
 type Props = {
@@ -7,9 +7,16 @@ type Props = {
 
 const ROLE_LABEL: Record<string, string> = {
   customer: 'Customer',
-  general_employee: 'General Employee',
-  hr_staff: 'HR Staff',
-  finance_staff: 'Finance Staff',
+  general_employee: 'Employee',
+  hr_staff: 'HR staff',
+  finance_staff: 'Finance staff',
+}
+
+const ROLE_BLURB: Record<string, string> = {
+  customer: 'Support, Privacy, Legal only',
+  general_employee: 'Policies across all five domains',
+  hr_staff: 'Plus named leave records',
+  finance_staff: 'Plus CTC and compensation',
 }
 
 export default function Login({ onLoggedIn }: Props) {
@@ -24,6 +31,16 @@ export default function Login({ onLoggedIn }: Props) {
       .then(setDemo)
       .catch(() => setDemo(null))
   }, [])
+
+  const roleCards = useMemo(() => {
+    if (!demo) return []
+    const preferred = new Map(demo.users.map((u) => [u.role, u]))
+    const alex = demo.users.find((u) => u.email === 'alex.employee@prism.local')
+    if (alex) preferred.set(alex.role, alex)
+    return ['customer', 'general_employee', 'hr_staff', 'finance_staff']
+      .map((role) => preferred.get(role))
+      .filter((u): u is DemoUsersResponse['users'][number] => Boolean(u))
+  }, [demo])
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -46,7 +63,7 @@ export default function Login({ onLoggedIn }: Props) {
         <p className="login-kicker">Kohler Unified Enterprise AI · Track 3</p>
         <h1>Sign in</h1>
         <p className="login-lead">
-          Role-gated knowledge bases. Access is enforced at retrieval — not just the UI.
+          Role-gated knowledge bases. Access is enforced at retrieval, not just the UI.
         </p>
         <form className="login-form" onSubmit={(e) => void onSubmit(e)}>
           <label>
@@ -77,39 +94,28 @@ export default function Login({ onLoggedIn }: Props) {
 
         {demo && (
           <div className="demo-users">
-            <h2>Demo accounts</h2>
+            <h2>Pick a demo role</h2>
             <p className="demo-pass">
               Shared password: <code>{demo.password}</code>
             </p>
-            <table>
-              <thead>
-                <tr>
-                  <th>Role</th>
-                  <th>Name</th>
-                  <th>Email</th>
-                </tr>
-              </thead>
-              <tbody>
-                {demo.users.map((u) => (
-                  <tr
-                    key={u.email}
-                    className="demo-row"
-                    onClick={() => {
-                      setEmail(u.email)
-                      setPassword(demo.password)
-                    }}
-                    title="Click to fill"
-                  >
-                    <td>{ROLE_LABEL[u.role] ?? u.role}</td>
-                    <td>{u.name}</td>
-                    <td>
-                      <code>{u.email}</code>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="demo-hint">Click a row to fill the form. Smoke test: Alex Rao (General Employee).</p>
+            <div className="role-grid">
+              {roleCards.map((u) => (
+                <button
+                  key={u.role}
+                  type="button"
+                  className={`role-card${email === u.email ? ' is-selected' : ''}`}
+                  onClick={() => {
+                    setEmail(u.email)
+                    setPassword(demo.password)
+                  }}
+                >
+                  <strong>{ROLE_LABEL[u.role] ?? u.role}</strong>
+                  <span>{u.name}</span>
+                  <em>{ROLE_BLURB[u.role] ?? u.email}</em>
+                </button>
+              ))}
+            </div>
+            <p className="demo-hint">Jury smoke test: Alex Rao, Employee.</p>
           </div>
         )}
       </div>

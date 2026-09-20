@@ -1,10 +1,10 @@
 # Prism Stress-Test Report
 
-- Generated: `2026-09-19T13:56:52.108157+00:00`
+- Generated: `2026-09-20T13:38:13.695805+00:00`
 - API: `http://127.0.0.1:8000`
-- Health: `{"status": "ok", "chunks_indexed": 497, "embed_model": "nomic-embed-text", "gen_model": "qwen2.5:7b-instruct", "title_model": "qwen2.5:3b-instruct", "domains": ["hr", "finance", "customer_support", "privacy", "legal"], "ollama": {"reachable": true, "host": "http://localhost:11434", "models_required": ["nomic-embed-text", "qwen2.5:7b-instruct", "qwen2.5:3b-instruct"], "models_missing": [], "ok": true}, "uploads": {"chunks_indexed": 0, "ttl_hours": 24.0, "max_bytes": 12582912, "allowed_suffixes": [".csv", ".docx", ".htm", ".html", ".json", ".markdown", ".md", ".pdf", ".txt"]}}`
+- Health: `{"status": "ok", "chunks_indexed": 519, "embed_model": "nomic-embed-text", "gen_model": "qwen2.5:7b-instruct", "title_model": "qwen2.5:3b-instruct", "domains": ["hr", "finance", "customer_support", "privacy", "legal"], "ollama": {"reachable": true, "host": "http://localhost:11434", "models_required": ["nomic-embed-text", "qwen2.5:7b-instruct", "qwen2.5:3b-instruct"], "models_missing": [], "ok": true}, "uploads": {"chunks_indexed": 12, "ttl_hours": 24.0, "max_bytes": 12582912, "allowed_suffixes": [".csv", ".docx", ".htm", ".html", ".json", ".markdown", ".md", ".pdf", ".txt"]}}`
 - Cases run: **39**
-- Wall time: **530s**
+- Wall time: **556s**
 
 ## Summary by category
 

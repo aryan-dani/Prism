@@ -23,7 +23,7 @@ New conversation. Ask: `An employee submits an expense claim for ₹15,000. Who 
 Expect: Reporting Manager, band ₹5,001–₹25,000, Finance chip.
 
 **0:45–1:10 — Domain switch + water callout**  
-Ask: `My toilet is occasionally leaking or running — what should I check?`  
+Ask: `My toilet is occasionally leaking or running. What should I check?`  
 Expect: Customer Support chip, trip-lever / flapper steps, **green water-conservation callout** with EPA liters/day.  
 Voiceover: “Mid-conversation domain switch — and a labeled water-waste estimate from published EPA figures, not the model.”
 

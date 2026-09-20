@@ -2,7 +2,7 @@
 
 **Kohler Unified Enterprise AI Agent · Track 3 · Kohler-MITWPU AI Research Lab**
 
-A long-form teaching document: from the case-study brief to every subsystem, with a concrete example for each concept. This is **not** the 4-slide jury pitch (`docs/pdf/deck.pdf`). For terse maps see `docs/architecture.md`, `docs/decisions.md`, and `docs/prompts.md`.
+A long-form teaching document: from the case-study brief to every subsystem, with a concrete example for each concept. This is **not** the 10-slide jury pitch (`docs/pdf/deck.pdf`). For terse maps see `docs/architecture.md`, `docs/decisions.md`, and `docs/prompts.md`.
 
 **Audience:** you (interview prep), evaluators who want depth, and anyone rebuilding the prototype from the repo.
 
@@ -687,7 +687,7 @@ API docs: http://127.0.0.1:8000/docs · Health: http://127.0.0.1:8000/api/health
 | `docs/architecture.md` | System map + roadmap |
 | `docs/decisions.md` | Why each infra choice |
 | `docs/prompts.md` | Prompts + non-LLM workflows (submission PDF) |
-| `docs/deck.md` / `docs/pdf/deck.pdf` | ≤4-slide jury pitch |
+| `docs/deck.md` / `docs/pdf/deck.pdf` | 10-slide jury pitch |
 | `docs/demo_script.md` | Demo narrative |
 
 Regenerate this PDF after edits:

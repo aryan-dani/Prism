@@ -388,6 +388,14 @@ VAGUE_NEW_SESSION_PATTERNS: list[tuple[re.Pattern[str], list[str]]] = [
     (re.compile(r"^can i get an extension\??$", re.I), ["hr", "finance", "customer_support"]),
     (re.compile(r"^what'?s covered under my plan\??$", re.I), ["hr", "customer_support", "legal"]),
     (re.compile(r"^is that allowed\??$", re.I), ["hr", "finance", "customer_support", "legal"]),
+    # "claim" alone is Finance expense vs Support warranty vs Legal claim — do not guess.
+    (
+        re.compile(
+            r"^what('?s| is) the process for (a |an |my |the )?claim\??$",
+            re.I,
+        ),
+        ["finance", "customer_support", "legal"],
+    ),
 ]
 
 

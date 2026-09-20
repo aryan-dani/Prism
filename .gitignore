@@ -78,6 +78,7 @@ docs/assets/_system_guide.html
 docs/assets/_prompts.html
 docs/assets/_prompts_preview/
 docs/assets/_render_*.html
+docs/assets/_demo_record/
 
 # Keep committed (do NOT ignore):
 #   backend/data/processed/*.jsonl
@@ -86,5 +87,5 @@ docs/assets/_render_*.html
 #   backend/eval/results/model_bench.*
 #   backend/eval/results/validation_*.md
 #   backend/eval/results/routing_smoke.json
-#   docs/**  (including docs/pdf/*.pdf)
+#   docs/**  (including docs/pdf/*.pdf and docs/assets/prism_demo.mp4)
 #   references/**
