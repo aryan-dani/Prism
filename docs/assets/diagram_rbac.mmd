@@ -1,0 +1,11 @@
+flowchart LR
+    UI["Login.tsx"] --> Login["POST /api/auth/login"]
+    Login --> Token["Bearer token localStorage"]
+    Token --> API["Protected routes Depends get_current_user"]
+    API --> Turn["handle_turn role + user_email"]
+    Turn --> Heuristic["_maybe_rbac_deny heuristics"]
+    Turn --> DomainGate["may_access_domain after route"]
+    Turn --> Retrieve["retriever chroma_where role_X True"]
+    Heuristic -->|"deny"| Log["access_denials SQLite log"]
+    DomainGate -->|"deny"| Log
+    Retrieve -->|"forbidden chunks never returned"| Safe["LLM only sees allowed context"]

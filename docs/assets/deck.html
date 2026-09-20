@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Prism - Jury Deck</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <style>
+    @page { size: 13.333in 7.5in; margin: 0; }
+    :root {
+      --font: "DM Sans", "Segoe UI", sans-serif;
+      --display: "Instrument Serif", Georgia, serif;
+      --ink: #1c2420;
+      --muted: #6f7a72;
+      --accent: #0f5c4c;
+      --panel: #faf7f1;
+      --line: #d5cebf;
+      --shadow: 0 18px 50px rgba(28, 36, 32, 0.10);
+    }
+    * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { margin: 0; padding: 0; background: #e4ddd0; }
+    body { font-family: var(--font); color: var(--ink); font-optical-sizing: auto; -webkit-font-smoothing: antialiased; }
+
+    .slide {
+      width: 1920px;
+      height: 1080px;
+      position: relative;
+      overflow: hidden;
+      page-break-after: always;
+      break-after: page;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(15, 92, 76, 0.14), transparent 42%),
+        radial-gradient(circle at 100% 100%, rgba(196, 92, 38, 0.07), transparent 36%),
+        linear-gradient(165deg, #f4f0e8, #e8e1d2);
+      padding: 22px 40px 38px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .slide:last-child { page-break-after: auto; }
+
+    .kicker {
+      font-size: 15px; font-weight: 650;
+      letter-spacing: 0.1em;
+      text-transform: uppercase; color: #0f5c4c; margin: 0;
+    }
+    h1 {
+      font-family: var(--display);
+      font-weight: 400; font-size: 50px; line-height: 1.05;
+      margin: 0; color: #16201c; letter-spacing: -0.03em;
+    }
+    .head { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; }
+    .footer {
+      position: absolute; left: 40px; right: 40px; bottom: 12px;
+      display: flex; justify-content: space-between;
+      font-size: 14px; font-weight: 650; color: #7a847c;
+    }
+
+    h3 { margin: 0 0 8px; font-size: 21px; color: #0f5c4c; font-weight: 650; }
+    p { margin: 0; }
+    ul { margin: 0; padding: 0 0 0 20px; }
+    code {
+      font-family: Consolas, "Courier New", monospace; font-size: 0.92em;
+      background: rgba(15, 92, 76, 0.08); padding: 1px 6px; border-radius: 4px;
+    }
+    .card {
+      background: rgba(250, 247, 241, 0.94);
+      border: 1px solid #d5cebf; border-radius: 14px; padding: 16px 18px;
+    }
+    table { width: 100%; border-collapse: collapse; background: rgba(250,247,241,0.96); border-radius: 12px; overflow: hidden; }
+    th, td { border: 1px solid #d5cebf; padding: 11px 14px; text-align: left; vertical-align: middle; font-size: 18px; }
+    th { background: #d7ebe4; color: #0f5c4c; font-weight: 800; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase; }
+    tr.pick td { background: #eaf6f1; }
+    td strong { color: #0f5c4c; }
+    .yes { color: #0f5c4c; font-weight: 800; font-size: 26px; }
+    .no { color: #c45c26; font-weight: 800; font-size: 26px; }
+    .pass { color: #0f5c4c; font-weight: 800; }
+    pre.cmd {
+      margin: 0; font-family: Consolas, monospace; font-size: 15px; line-height: 1.5;
+      background: #1c2420; color: #e8efe9; border-radius: 10px; padding: 14px 16px; white-space: pre-wrap;
+    }
+
+    /* ── Title ── */
+    .slide-title { flex: 1; min-height: 0; display: grid; grid-template-columns: 0.92fr 1.08fr; gap: 28px; align-items: stretch; }
+    .bleed-copy { display: flex; flex-direction: column; justify-content: flex-start; padding: 28px 8px 8px 4px; }
+    .bleed-copy h1 { font-family: var(--display); font-size: 100px; margin: 0 0 16px; letter-spacing: -0.04em; line-height: 0.9; }
+    .lede { font-size: 24px; line-height: 1.4; color: #3f4a44; margin: 0 0 20px; max-width: 640px; font-weight: 400; }
+    .pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 18px; }
+    .pill { background: #d7ebe4; color: #0f5c4c; border-radius: 999px; padding: 8px 16px; font-size: 15px; font-weight: 600; }
+    .meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 22px; }
+    .meta-chip {
+      font-family: var(--font); font-size: 15px; font-weight: 500; color: #3f4a44;
+      background: rgba(250,247,241,0.9); border: 1px solid var(--line);
+      border-radius: 999px; padding: 8px 16px;
+    }
+    .title-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 580px; }
+    .title-stat { background: rgba(250,247,241,0.94); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px; }
+    .title-stat b { display: block; font-family: var(--display); font-size: 36px; color: var(--accent); line-height: 1.05; font-weight: 400; }
+    .title-stat span { font-size: 15px; color: #5c665f; font-weight: 500; }
+    .shot-frame {
+      min-height: 0; height: 100%;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      display: flex; flex-direction: column;
+    }
+    .shot-chrome {
+      flex: 0 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px;
+      background: #f3efe6;
+      border-bottom: 1px solid var(--line);
+      font-size: 13px; font-weight: 500; color: var(--muted);
+    }
+    .shot-chrome b { color: var(--accent); font-weight: 650; }
+    .shot-frame img {
+      flex: 1; min-height: 0; width: 100%;
+      object-fit: cover; object-position: center top; display: block;
+    }
+    .shot-frame.fit { background: #efe8dc; }
+    .shot-frame.fit img { object-fit: contain; object-position: top center; }
+
+    /* ── Slide 2 ── */
+    .approach { flex: 1; min-height: 0; display: grid; grid-template-columns: 460px 1fr; gap: 16px; }
+    .facts { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+    .facts > .fact { flex: 0 0 auto; display: block; }
+    .fact { background: rgba(250,247,241,0.94); border: 1px solid #d5cebf; border-radius: 12px; padding: 14px 16px; }
+    .fact h3 { font-size: 20px; margin: 0 0 6px; }
+    .fact p { font-size: 17px; line-height: 1.4; color: #3f4a44; }
+    .exact {
+      flex: 1; min-height: 0; background: #0f5c4c; color: #f4f0e8; border-radius: 12px; padding: 18px 20px;
+      display: flex; flex-direction: column; justify-content: center; gap: 10px;
+    }
+    .exact h3 { color: #d7ebe4; font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; margin: 0; }
+    .exact .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .exact .pair div { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 12px 14px; }
+    .exact b { display: block; font-family: var(--display); font-size: 30px; font-weight: 400; }
+    .exact small { font-size: 14px; opacity: 0.85; }
+    .shot-wrap { min-height: 0; height: 100%; border-radius: 16px; overflow: hidden; border: 1px solid #d5cebf; background: #efeae0; }
+    .shot { width: 100%; height: 100%; object-fit: contain; object-position: top center; display: block; }
+    .shot.cover { object-fit: cover; }
+
+    /* ── Slide 3 ── */
+    .pipe { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+    .req { display: grid; grid-template-columns: 1fr 24px 1fr 24px 1fr 24px 1.15fr; gap: 8px; flex: 0 0 auto; }
+    .node {
+      background: #faf7f1; border: 1px solid #cfc7b6; border-radius: 12px;
+      padding: 16px 12px; text-align: center;
+    }
+    .node b { font-family: var(--display); font-size: 24px; display: block; font-weight: 400; }
+    .node small { font-size: 15px; color: #5c665f; font-weight: 600; }
+    .node.accent { background: #0f5c4c; color: #f4f0e8; border-color: #0f5c4c; }
+    .node.accent small { color: rgba(244,240,232,0.85); }
+    .arr { display: flex; align-items: center; justify-content: center; font-size: 22px; color: #0f5c4c; font-weight: 800; }
+    .planes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .plane { background: #faf7f1; border: 1px solid #d5cebf; border-radius: 14px; padding: 18px 20px; height: 100%; display: flex; flex-direction: column; }
+    .plane.soft { background: #eaf6f1; border-color: #b7d8ce; }
+    .plane h3 { font-family: var(--display); font-size: 26px; font-weight: 400; margin: 0 0 12px; color: #16201c; }
+    .plane ul { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+    .plane li { font-size: 18px; line-height: 1.4; color: #3f4a44; margin: 0; }
+    .gates-strip { flex: 0 0 auto; display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    .gchip {
+      background: #faf7f1; border: 1px solid #d5cebf; border-radius: 12px;
+      padding: 14px 10px 16px; text-align: center;
+      display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    }
+    .gchip .n {
+      width: 28px; height: 28px; border-radius: 50%; background: #0f5c4c; color: #faf7f1;
+      font-size: 14px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 6px;
+    }
+    .gchip b { display: block; font-family: var(--display); font-size: 22px; font-weight: 400; color: #16201c; }
+    .gchip span { display: block; font-size: 15px; color: #5c665f; margin-top: 6px; line-height: 1.35; font-weight: 500; }
+
+    /* ── Slide 4 ── */
+    .steps7 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    .step { background: #faf7f1; border: 1px solid #d5cebf; border-radius: 12px; padding: 14px 12px; }
+    .num {
+      width: 28px; height: 28px; border-radius: 50%; background: #0f5c4c; color: #faf7f1;
+      font-size: 14px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 8px;
+    }
+    .step h3 { font-size: 17px; margin: 0 0 6px; }
+    .step p { font-size: 16px; line-height: 1.35; color: #4a554e; }
+    .turn-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+    .turn-body .card { display: flex; flex-direction: column; gap: 10px; min-height: 0; padding: 18px; height: 100%; }
+    .flow-v { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+    .flow-v .box {
+      background: #fff; border: 1px solid #cfc7b6; border-radius: 9px;
+      padding: 12px 14px; font-size: 16px; font-weight: 650; text-align: center;
+      flex: 1; display: flex; align-items: center; justify-content: center;
+    }
+    .flow-v .box.yes { background: #eaf6f1; border-color: #0f5c4c; }
+    .flow-v .box.no { background: #f8eee8; border-color: #c45c26; }
+    .flow-v .down { text-align: center; color: #0f5c4c; font-weight: 800; font-size: 14px; line-height: 1; }
+    .worked { margin-top: 4px; background: #eaf6f1; border-radius: 10px; padding: 12px 14px; font-size: 15px; line-height: 1.4; color: #3f4a44; }
+    .fan-src {
+      background: #0f5c4c; color: #f4f0e8; border-radius: 10px; padding: 14px 16px;
+      text-align: center; font-weight: 800; font-size: 18px;
+    }
+    .fan-src small { display: block; font-weight: 500; font-size: 14px; opacity: 0.85; margin-top: 4px; }
+    .fan-out { display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .fan-out span {
+      background: #fff; border: 1px solid #d5cebf; border-radius: 8px;
+      padding: 12px 14px; font-size: 16px; display: grid; grid-template-columns: 130px 1fr; gap: 8px; align-items: center; flex: 1;
+    }
+    .fan-out b { color: #0f5c4c; }
+    .fan-out em { font-style: normal; color: #4a554e; font-weight: 500; font-size: 15px; }
+
+    /* ── Slide 5 ── */
+    .stack { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.15fr 0.85fr; grid-template-rows: 1fr auto; gap: 14px; }
+    .stack table { height: 100%; }
+    .notes4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; grid-column: 1 / -1; }
+    .notes4 .fact { display: flex; flex-direction: column; justify-content: center; }
+    .notes4 .fact h3 { font-size: 18px; }
+    .notes4 .fact p { font-size: 16px; }
+
+    /* ── Slide 6 ── */
+    .corpus {
+      display: grid; grid-template-columns: 240px 1fr; gap: 24px; align-items: center;
+      background: #0f5c4c; color: #f4f0e8;
+      border-radius: 16px; padding: 16px 24px;
+      flex: 0 0 auto;
+    }
+    .corpus-n { font-family: var(--display); font-size: 78px; color: #f4f0e8; line-height: 0.88; }
+    .corpus-n small { display: block; font-family: var(--font); font-size: 16px; color: #d7ebe4; font-weight: 650; margin-top: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+    .corpus-viz { display: flex; flex-direction: column; gap: 10px; }
+    .bar { display: flex; height: 22px; border-radius: 8px; overflow: hidden; }
+    .bar span { display: block; }
+    .bar .b-s, .legend .b-s { background: #7dcebc; }
+    .bar .b-p, .legend .b-p { background: #c5e6dc; }
+    .bar .b-l, .legend .b-l { background: #eaf6f1; }
+    .bar .b-h, .legend .b-h { background: #e0a06a; }
+    .bar .b-f, .legend .b-f { background: #f3e0d2; }
+    .bar .b-s { flex: 362; }
+    .bar .b-p { flex: 51; }
+    .bar .b-l { flex: 45; }
+    .bar .b-h { flex: 49; }
+    .bar .b-f { flex: 22; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 17px; font-weight: 650; color: #f4f0e8; }
+    .legend span { display: inline-flex; align-items: center; gap: 8px; }
+    .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; flex: 0 0 12px; font-style: normal; }
+    .know {
+      flex: 1; min-height: 0;
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr;
+      grid-template-rows: 1fr 1fr auto;
+      gap: 12px;
+    }
+    .dom {
+      background: #faf7f1; border: 1px solid #d5cebf; border-radius: 14px;
+      padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-height: 0;
+      justify-content: space-between;
+    }
+    .dom.hero { grid-row: 1 / 3; padding: 22px 24px; gap: 10px; justify-content: flex-start; }
+    .dom-foot { display: flex; flex-direction: column; gap: 6px; }
+    .dom .count { font-family: var(--display); font-size: 56px; color: #0f5c4c; line-height: 0.95; margin: 0; font-weight: 400; }
+    .dom.hero .count { font-size: 92px; }
+    .dom h3 { margin: 0; font-family: var(--display); font-size: 26px; font-weight: 400; color: #16201c; }
+    .dom.hero h3 { font-size: 34px; }
+    .dom .share { font-size: 15px; font-weight: 700; color: #0f5c4c; letter-spacing: 0.04em; text-transform: uppercase; }
+    .dom .body { font-size: 16px; line-height: 1.38; color: #4a554e; }
+    .dom.hero .body { font-size: 18px; line-height: 1.42; flex: 0 0 auto; }
+    .dom .example { font-family: var(--font); font-size: 14px; line-height: 1.3; color: #16201c; background: #eaf6f1; border-radius: 8px; padding: 8px 10px; font-weight: 600; }
+    .dom.hero .example { font-size: 17px; padding: 10px 12px; margin-top: 4px; }
+    .acl { font-size: 14px; font-weight: 700; color: #0f5c4c; background: #eaf6f1; border-radius: 8px; padding: 8px 10px; text-align: center; margin-top: 0; }
+    .badge {
+      display: inline-block; font-size: 12px; font-weight: 800; letter-spacing: 0.08em;
+      text-transform: uppercase; border-radius: 999px; padding: 4px 9px; width: fit-content;
+    }
+    .badge.real { background: #d7ebe4; color: #0f5c4c; }
+    .badge.syn { background: #f3e0d2; color: #8a4b12; }
+    .know-pipe { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    .know-pipe .fact { padding: 14px 16px; }
+
+    /* ── Slide 7 ── */
+    .rbac { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
+    .rbac > table { flex: 1; min-height: 0; }
+    .rbac > table td, .rbac > table th { text-align: center; font-size: 20px; padding: 18px 8px; }
+    .rbac > table th:first-child, .rbac > table td:first-child { text-align: left; font-weight: 700; font-size: 18px; }
+    .rbac-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 0 0 auto; }
+    .rbac-bottom .card { height: auto; display: flex; flex-direction: column; min-height: 0; }
+    .rbac-bottom .card table { flex: 0 0 auto; height: auto; }
+    .codeblock {
+      font-family: Consolas, monospace; font-size: 15px; background: #1c2420; color: #e8efe9;
+      border-radius: 10px; padding: 14px 16px; margin: 12px 0; line-height: 1.5;
+    }
+    .who { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+    .who div { background: #fff; border: 1px solid #d5cebf; border-radius: 8px; padding: 10px 12px; font-size: 15px; }
+    .who b { display: block; color: #0f5c4c; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+    /* ── Slide 8 ── */
+    .innov { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1.12fr; gap: 16px; align-items: stretch; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px; min-height: 0; }
+    .tile { background: #faf7f1; border: 1px solid #d5cebf; border-radius: 12px; padding: 16px 18px; display: flex; flex-direction: column; justify-content: flex-start; min-height: 0; }
+    .tile h3 { font-size: 20px; margin: 0 0 8px; }
+    .tile p { font-size: 16px; line-height: 1.4; color: #4a554e; }
+
+    /* ── Slide 9 ── */
+    .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; flex: 0 0 auto; }
+    .metric { background: #faf7f1; border: 1px solid #d5cebf; border-radius: 12px; padding: 16px 10px; text-align: center; }
+    .metric .n { font-family: var(--display); font-size: 56px; color: #0f5c4c; line-height: 1; font-weight: 400; }
+    .metric .l { margin-top: 8px; font-size: 16px; font-weight: 700; color: #4a554e; }
+    .evi { flex: 1; min-height: 0; display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 12px; align-items: stretch; }
+    .evi table { height: 100%; }
+    .evi table td { font-size: 17px; padding: 9px 12px; }
+    .evi .card { display: flex; flex-direction: column; gap: 10px; height: 100%; justify-content: space-between; }
+    .evi .card p { font-size: 16px; line-height: 1.4; color: #3f4a44; }
+
+    /* ── Slide 10 ── */
+    .clone { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; flex: 0 0 auto; }
+    .clone .n { font-family: var(--display); font-size: 30px; color: #0f5c4c; margin: 0 0 8px; font-weight: 400; }
+    .clone h3 { font-size: 18px; margin: 0 0 8px; }
+    .clone .card { display: flex; flex-direction: column; }
+    .clone pre.cmd { flex: 0 0 auto; }
+    .ask {
+      font-family: var(--display); font-size: 30px; line-height: 1.3; color: #0f5c4c; font-weight: 400;
+      margin: 0; padding: 16px 20px;
+      background: rgba(215, 235, 228, 0.78);
+      border-left: 6px solid #0f5c4c; border-radius: 0 12px 12px 0;
+      flex: 0 0 auto;
+    }
+    .ask-grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 12px; flex: 0 0 auto; align-items: stretch; }
+    .ask-grid table, .ask-grid .card { height: auto; }
+    .live { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; flex: 0 0 auto; }
+    .live .card { display: flex; flex-direction: column; justify-content: flex-start; }
+    .ask-grid .card p { font-size: 16px; line-height: 1.45; color: #3f4a44; }
+    .live .card h3 { font-size: 17px; }
+    .live p { font-size: 16px; line-height: 1.4; color: #3f4a44; }
+  </style>
+</head>
+<body>
+
+  <!-- 1 -->
+  <section class="slide">
+    <div class="slide-title">
+      <div class="bleed-copy">
+        <p class="kicker">Kohler-MITWPU · Track 3</p>
+        <h1>Prism</h1>
+        <p class="lede">One query, any format: a local conversational agent across five enterprise domains, plus the file you drop in chat.</p>
+        <div class="pills">
+          <span class="pill">HR</span><span class="pill">Finance</span><span class="pill">Support</span>
+          <span class="pill">Privacy</span><span class="pill">Legal</span><span class="pill">+ upload</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-chip">Unified Enterprise AI</span>
+          <span class="meta-chip">Ollama on-device</span>
+          <span class="meta-chip">RTX 5070 · 8GB</span>
+        </div>
+        <div class="title-stats">
+          <div class="title-stat"><b>5 domains</b><span>3 real Kohler · 2 synthetic Meridian</span></div>
+          <div class="title-stat"><b>~519 chunks</b><span>One Chroma collection + BM25</span></div>
+          <div class="title-stat"><b>39 / 39</b><span>Adversarial stress harness PASS</span></div>
+          <div class="title-stat"><b>8 GB VRAM</b><span>No cloud LLM · clone and run</span></div>
+        </div>
+      </div>
+      <div class="shot-frame">
+        <div class="shot-chrome"><b>Live UI</b><span>Landing · localhost:5173</span></div>
+        <img src="screenshot_landing.png" alt="Prism landing page" />
+      </div>
+    </div>
+    <div class="footer"><span>Prism</span><span>1 / 10</span></div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">Core approach</p>
+      <h1>One agent. Five domains. Grounded, local, honest.</h1>
+    </div>
+    <div class="approach">
+      <div class="facts">
+        <div class="fact">
+          <h3>Unified front door</h3>
+          <p>HR, Finance, Support, Privacy, and Legal in one thread - plus a session-scoped sixth domain for an attached PDF/DOCX.</p>
+        </div>
+        <div class="fact">
+          <h3>3 real / 2 synthetic - disclosed</h3>
+          <p>Real Kohler Assist, Privacy Policy, Legal. Synthetic Meridian Fixtures HR &amp; Finance because no internal Kohler manuals are public.</p>
+        </div>
+        <div class="fact">
+          <h3>Local-first, not a cloud wrapper</h3>
+          <p>Ollama on the laptop. Uploads never leave the machine. Vectors purge on delete and a 24h TTL sweep.</p>
+        </div>
+        <div class="exact">
+          <h3>The demo that has to be exact</h3>
+          <div class="pair">
+            <div><b>₹25,001</b><small>Dept Head + Reporting Manager</small></div>
+            <div><b>₹24,999</b><small>Reporting Manager only</small></div>
+          </div>
+          <small>Looked up in code from Finance Policy 2.1 - the 7B does not invent the band.</small>
+        </div>
+      </div>
+      <div class="shot-frame fit">
+        <div class="shot-chrome"><b>Live UI</b><span>Chat · ₹25,001 vs ₹24,999</span></div>
+        <img src="deck_chat.png" alt="INR 25,001 vs 24,999 exactness" />
+      </div>
+    </div>
+    <div class="footer"><span>Approach</span><span>2 / 10</span></div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">System architecture</p>
+      <h1>React · FastAPI · hand-rolled agent · two Chroma collections</h1>
+    </div>
+    <div class="pipe">
+      <div class="req">
+        <div class="node"><b>User</b><small>typed or voice</small></div>
+        <div class="arr">→</div>
+        <div class="node"><b>React + Vite</b><small>login · formats · citations</small></div>
+        <div class="arr">→</div>
+        <div class="node"><b>FastAPI :8000</b><small>opaque Bearer session</small></div>
+        <div class="arr">→</div>
+        <div class="node accent"><b>agent.py</b><small>ordered gates - not LangGraph</small></div>
+      </div>
+      <div class="planes">
+        <div class="plane">
+          <h3>prism_kb - enterprise memory</h3>
+          <ul>
+            <li>One collection for all five domains - not five vector DBs</li>
+            <li>~519 chunks + BM25 sidecar, fused with Reciprocal Rank Fusion</li>
+            <li>Cross-tags via boolean <code>domain_*</code> flags (warranty lives in Support and Legal)</li>
+            <li><code>source_priority</code> at ingest: official PDF = 100, Assist HTML = 10</li>
+            <li>Role flags <code>role_*</code> are metadata, not a prompt instruction</li>
+            <li>Agnostic retrieve is still role-filtered, so votes cannot leak a hidden domain</li>
+          </ul>
+        </div>
+        <div class="plane">
+          <h3>prism_uploads - session only</h3>
+          <ul>
+            <li>Separate collection, always filtered by <code>session_id</code></li>
+            <li>PDF / DOCX / TXT / HTML through the same <code>extract.py</code> as the KB</li>
+            <li>Never mixed into <code>prism_kb</code> - a leaked upload cannot poison search</li>
+            <li>Purged on session delete, on file remove, and by a 24h TTL sweep</li>
+            <li>When the user points at the file, Meridian <code>policy_math</code> is skipped</li>
+            <li>Point-at-file is explicit: an attached PDF does not silently hijack every turn</li>
+          </ul>
+        </div>
+        <div class="plane soft">
+          <h3>One Ollama call per answer</h3>
+          <ul>
+            <li>Generator: <code>qwen2.5:7b-instruct</code> Q4 → CanonicalAnswer JSON</li>
+            <li>Embed: <code>nomic-embed-text</code> for both index and query (~274 MB)</li>
+            <li>Titles: <code>qwen2.5:3b</code> with keep-alive 0 - unloads after naming the chat</li>
+            <li>Citations must be ⊆ retrieved <code>source_url</code>s; extras are stripped</li>
+            <li>No router LLM. No second call to "pretty-print JSON"</li>
+            <li>One generation call per answer. Reformats never touch Ollama again</li>
+          </ul>
+        </div>
+        <div class="plane">
+          <h3>Five renderers, ₹0 reformats</h3>
+          <ul>
+            <li>Prose · JSON · XML · Excel (.xlsx via openpyxl) · draft email</li>
+            <li>Reformats replay stored <code>last_answer</code> - gates 4-7 never run again</li>
+            <li>RBAC is a Chroma <code>where</code> clause, not a hidden chip in the UI</li>
+            <li>Auth: bcrypt hashes + opaque Bearer tokens in SQLite</li>
+            <li>Peak generation VRAM 5143 MB of an 8151 MiB laptop budget</li>
+            <li>Excel is a file download, not a screenshot of a table in chat</li>
+          </ul>
+        </div>
+      </div>
+      <div class="gates-strip">
+        <div class="gchip"><span class="n">1</span><b>Refuse</b><span>Jailbreak and CFO spoof die here. No LLM. No retrieve.</span></div>
+        <div class="gchip"><span class="n">2</span><b>policy_math</b><span>CL carry-forward and INR bands in Python, not the 7B.</span></div>
+        <div class="gchip"><span class="n">3</span><b>Reformat</b><span>JSON / Excel / XML / email from last_answer only.</span></div>
+        <div class="gchip"><span class="n">4</span><b>Upload</b><span>Session file wins if pointed at. Meridian cannot override it.</span></div>
+        <div class="gchip"><span class="n">5</span><b>Route</b><span>Anchors + votes, ~76 ms. Ambiguous? Ask. Don't guess.</span></div>
+        <div class="gchip"><span class="n">6</span><b>Retrieve</b><span>Hybrid RRF, then role_* AND. Low confidence: no-answer.</span></div>
+        <div class="gchip"><span class="n">7</span><b>Generate</b><span>One CanonicalAnswer JSON. Then any of five renderers.</span></div>
+      </div>
+    </div>
+    <div class="footer"><span>Architecture</span><span>3 / 10</span></div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">Turn pipeline</p>
+      <h1>Seven gates. One CanonicalAnswer. Five formats.</h1>
+    </div>
+    <div class="steps7">
+      <div class="step"><div class="num">1</div><h3>Refuse</h3><p>Jailbreak and CFO-override die here. No model, no retrieve.</p></div>
+      <div class="step"><div class="num">2</div><h3>policy_math</h3><p>CL carry-forward and INR bands are computed in Python.</p></div>
+      <div class="step"><div class="num">3</div><h3>Reformat</h3><p>JSON / Excel / XML / email re-render <code>last_answer</code> only.</p></div>
+      <div class="step"><div class="num">4</div><h3>Upload</h3><p>Session file wins when pointed at. Meridian cannot override it.</p></div>
+      <div class="step"><div class="num">5</div><h3>Route</h3><p>Anchors + hit votes. Ambiguous: ask, don't guess the domain.</p></div>
+      <div class="step"><div class="num">6</div><h3>Retrieve</h3><p>Dense + BM25 → RRF, then role ACL. Low confidence → no-answer.</p></div>
+      <div class="step"><div class="num">7</div><h3>Generate</h3><p>One Qwen JSON object. Polish citations. Then any renderer.</p></div>
+    </div>
+    <div class="turn-body">
+      <div class="card">
+        <h3>Domain router - no LLM, ~76 ms</h3>
+        <div class="flow-v">
+          <div class="box">Query embedding vs ~12 hand-written anchors / domain</div>
+          <div class="down">↓</div>
+          <div class="box">Hit-vote share from agnostic hybrid top-10</div>
+          <div class="down">↓</div>
+          <div class="box">Score = 0.7 · cosine + 0.3 · vote share</div>
+          <div class="down">↓</div>
+          <div class="box yes">Clear winner → route to that domain</div>
+          <div class="box">Close, sticky domain still leads → stay</div>
+          <div class="box no">No signal → ask a clarifying question</div>
+        </div>
+        <div class="worked"><strong>Worked example.</strong> "Is that allowed?" after an HR turn stays in HR (sticky). The same words cold-start with no sticky, so Prism asks a clarifying question instead of guessing Finance vs Legal.</div>
+        <div class="worked"><strong>Reformat path.</strong> After the expense answer, "give that as JSON" fires gate 3 only. The 7B is not loaded. Domain does not change.</div>
+      </div>
+      <div class="card">
+        <div class="fan-src">CanonicalAnswer JSON<small>direct_answer · key_facts · steps · sources · no_answer</small></div>
+        <div class="fan-out">
+          <span><b>Prose</b><em>Chat bubble the jury reads first</em></span>
+          <span><b>JSON</b><em>Schema as stored - no second generation</em></span>
+          <span><b>XML</b><em>Tagged export of the same object</em></span>
+          <span><b>Excel</b><em>openpyxl .xlsx download from key_facts</em></span>
+          <span><b>Email</b><em>Draft body - 12-turn carry-forward uses this</em></span>
+          <span><b>Zero extra LLM</b><em>Saying "give that as JSON" fires gate 3 only</em></span>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>One turn</span><span>4 / 10</span></div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">Tech stack · 8 GB VRAM</p>
+      <h1>Every choice is sized for an RTX 5070 laptop</h1>
+    </div>
+    <div class="stack">
+      <table>
+        <thead><tr><th>Layer</th><th>Choice</th><th>Why this, not the alternative</th></tr></thead>
+        <tbody>
+          <tr class="pick"><td>Generation</td><td><code>qwen2.5:7b-instruct</code> Q4</td><td>Best Finance exactness at 6.4s / 5143 MB - 2× Llama/Mistral on ₹ bands</td></tr>
+          <tr><td>Embeddings</td><td><code>nomic-embed-text</code></td><td>~274 MB beside the 7B. Same model for index and query.</td></tr>
+          <tr><td>Titles</td><td><code>qwen2.5:3b-instruct</code></td><td>Keep-alive 0 - unload immediately after naming a chat</td></tr>
+          <tr><td>Vectors</td><td>Embedded Chroma + BM25 → RRF</td><td>No Qdrant / Pinecone process on the laptop</td></tr>
+          <tr><td>Agent</td><td>Python state machine in <code>agent.py</code></td><td>Explicit gates - not LangGraph overhead on 8GB</td></tr>
+          <tr><td>Retrieve ACL</td><td><code>role_{role}=True</code> in Chroma <code>where</code></td><td>Forbidden chunks never reach the prompt</td></tr>
+          <tr><td>Auth</td><td>bcrypt + opaque Bearer tokens</td><td>SQLite demo users; chat text cannot escalate role</td></tr>
+          <tr><td>API / UI</td><td>FastAPI · React + Vite</td><td>Login, format bar, voice, cited sources, workflow chip</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>12 golden Qs</th><th>Facts</th><th>Finance</th><th>Latency</th><th>VRAM</th></tr></thead>
+        <tbody>
+          <tr class="pick"><td><strong>qwen2.5:7b</strong> ★</td><td>74%</td><td>67%</td><td>6.4s</td><td>5143</td></tr>
+          <tr><td>qwen3:8b</td><td>74%</td><td>67%</td><td>18.4s</td><td>6241</td></tr>
+          <tr><td>llama3.1:8b q4</td><td>74%</td><td>33%</td><td>9.9s</td><td>6022</td></tr>
+          <tr><td>mistral:7b</td><td>78%</td><td>33%</td><td>15.4s</td><td>5726</td></tr>
+          <tr><td colspan="5">Schema OK is <strong>100%</strong> on all four. Qwen3 matches quality and is ~3× slower - default stays 2.5. Override with <code>PRISM_GEN_MODEL</code>.</td></tr>
+          <tr><td colspan="5">Routing (40 Qs, no generator): <strong>92.1%</strong> domain accuracy · <strong>100%</strong> hit@5 · <strong>76 ms</strong></td></tr>
+          <tr><td colspan="5">VRAM envelope: nomic ~274 MB + 7B Q4 5143 MB. Title 3B is not resident. Headroom is KV cache, not a second 7B.</td></tr>
+        </tbody>
+      </table>
+      <div class="notes4">
+        <div class="fact"><h3>No cloud LLM</h3><p>Generation, embeddings, and titles stay on Ollama. The jury can clone and run fully offline.</p></div>
+        <div class="fact"><h3>No extra LLM to route</h3><p>Domain pick is cosine anchors + retrieval votes. Saves a 7B call on every turn.</p></div>
+        <div class="fact"><h3>Formats cost ₹0</h3><p>Re-render from CanonicalAnswer. Excel is openpyxl, not another generation.</p></div>
+        <div class="fact"><h3>VRAM budget 8151 MiB</h3><p>Peak 5143 MB leaves headroom for KV cache. Title model keep-alive is 0.</p></div>
+      </div>
+    </div>
+    <div class="footer"><span>Tech stack</span><span>5 / 10</span></div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">Knowledge bases</p>
+      <h1>Five domains, one collection, labeled not faked</h1>
+    </div>
+    <div class="corpus">
+      <div class="corpus-n">~519<small>chunks in prism_kb</small></div>
+      <div class="corpus-viz">
+        <div class="bar" title="Chunk mix after dedupe">
+          <span class="b-s"></span>
+          <span class="b-p"></span>
+          <span class="b-l"></span>
+          <span class="b-h"></span>
+          <span class="b-f"></span>
+        </div>
+        <div class="legend">
+          <span><i class="b-s"></i>Support 362</span>
+          <span><i class="b-p"></i>Privacy 51</span>
+          <span><i class="b-l"></i>Legal 45</span>
+          <span><i class="b-h"></i>HR 49 · synthetic</span>
+          <span><i class="b-f"></i>Finance 22 · synthetic</span>
+        </div>
+      </div>
+    </div>
+    <div class="know">
+      <div class="dom hero">
+        <span class="badge real">Real · Kohler Assist</span>
+        <h3>Customer Support</h3>
+        <p class="count">362</p>
+        <p class="share">70% of the enterprise KB</p>
+        <p class="body">assist.kohler.com via <code>__NEXT_DATA__</code>. 331 articles, heading-split. Nav and footer dropped. Warranty pages are also tagged Legal, so a leaking-toilet question can still surface the official fixture PDF.</p>
+        <p class="body">Same <code>extract.py</code> as session uploads. Duplicate chunk ids skipped at index time. Rebuild with <code>python -m prism.ingest.build_index</code>.</p>
+        <p class="example"><strong>Ask:</strong> My toilet is leaking. What should I check?</p>
+        <p class="acl">public · every role</p>
+      </div>
+      <div class="dom">
+        <span class="badge real">Real</span>
+        <h3>Privacy</h3>
+        <p class="count">51</p>
+        <p class="body">Kohler Privacy Policy, heading-boundary chunks. The CCPA cookie URL 404 is flagged in the corpus, not invented as if it existed. Visible to every role. A privacy question does not retrieve a random Support article.</p>
+        <div class="dom-foot">
+          <p class="example"><strong>Ask:</strong> What personal data does Kohler collect?</p>
+          <p class="acl">public · every role</p>
+        </div>
+      </div>
+      <div class="dom">
+        <span class="badge real">Real</span>
+        <h3>Legal</h3>
+        <p class="count">45</p>
+        <p class="body">T&amp;C, Prop 65, SDS, warranties. Official PDF fixture K-3901 at <code>source_priority=100</code> beats Assist HTML (10). Retrieve can still see both; the PDF is sorted first.</p>
+        <div class="dom-foot">
+          <p class="example"><strong>Ask:</strong> Is a damaged faucet Kohler's liability?</p>
+          <p class="acl">public · every role</p>
+        </div>
+      </div>
+      <div class="dom">
+        <span class="badge syn">Synthetic</span>
+        <h3>HR</h3>
+        <p class="count">49</p>
+        <p class="body">Meridian policy + staff leave register. Named balances are <code>hr_staff</code> only. Leave policy (carry-forward, leave year) is visible to employees. No public Kohler HR manual exists.</p>
+        <div class="dom-foot">
+          <p class="example"><strong>Ask:</strong> How many CL days can I carry?</p>
+          <p class="acl">policy vs records</p>
+        </div>
+      </div>
+      <div class="dom">
+        <span class="badge syn">Synthetic</span>
+        <h3>Finance</h3>
+        <p class="count">22</p>
+        <p class="body">Meridian INR bands, per diem, CapEx. Compensation / CTC register is <code>finance_staff</code> only. ₹25,001 vs ₹24,999 is looked up in code, not guessed by the 7B.</p>
+        <div class="dom-foot">
+          <p class="example"><strong>Ask:</strong> Who approves a claim for ₹25,001?</p>
+          <p class="acl">policy vs CTC</p>
+        </div>
+      </div>
+      <div class="know-pipe">
+        <div class="fact"><h3>1 · Crawl</h3><p>Polite ~1 req/s Assist sitemap + kohler.com legal HTML. Read-only, academic use for this case study.</p></div>
+        <div class="fact"><h3>2 · Parse / author</h3><p>JSONL in <code>data/processed/</code>. Same <code>extract.py</code> as uploads. Duplicate chunk ids skipped at index time.</p></div>
+        <div class="fact"><h3>3 · Embed</h3><p><code>build_index</code> writes Chroma + BM25. Role flags and <code>source_priority</code> are metadata at ingest.</p></div>
+        <div class="fact"><h3>Why synthetic?</h3><p>No public Kohler HR/Finance manuals exist. Inventing "real" ones would be dishonest. Meridian is labeled in the UI.</p></div>
+      </div>
+    </div>
+    <div class="footer"><span>Knowledge</span><span>6 / 10</span></div>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">RBAC · source authority</p>
+      <h1>Access is a Chroma <code>where</code> clause - not a hidden menu</h1>
+    </div>
+    <div class="rbac">
+      <table>
+        <thead>
+          <tr>
+            <th>Role</th><th>Support</th><th>Privacy</th><th>Legal</th>
+            <th>HR policy</th><th>HR records</th><th>Finance policy</th><th>CTC / pay</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Customer</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✕</td><td class="no">✕</td><td class="no">✕</td><td class="no">✕</td></tr>
+          <tr><td>General employee</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✕</td><td class="yes">✓</td><td class="no">✕</td></tr>
+          <tr><td>HR staff</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✕</td></tr>
+          <tr class="pick"><td>Finance staff</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✕</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+        </tbody>
+      </table>
+      <div class="notes4">
+        <div class="fact"><h3>Official PDF wins</h3><p>Fixture K-3901 is <code>source_priority=100</code>. That number is the answer, not a maybe.</p></div>
+        <div class="fact"><h3>Retrieve still sees both</h3><p>Hybrid search can return the Assist HTML too. It is sorted into the prompt below the PDF.</p></div>
+        <div class="fact"><h3>HTML is a footnote</h3><p>Assist HTML is priority 10. One confident number plus a caveat, not a dump of two manuals.</p></div>
+        <div class="fact"><h3>Same rule as uploads</h3><p>When the user points at their file, Meridian policy_math is skipped so a fake table cannot win.</p></div>
+      </div>
+      <div class="rbac-bottom">
+        <div class="card">
+          <h3>Enforced on retrieve - before the LLM sees a chunk</h3>
+          <p style="font-size:16px;line-height:1.45;color:#3f4a44;">Every query ANDs <code>role_{role}=True</code>. Agnostic hit-votes cannot see forbidden chunks, so the router cannot leak by domain. Denials are logged. Chat text ("I am HR") never changes role.</p>
+          <div class="codeblock">where = {"$and": [{"domain_hr": True}, {"role_hr_staff": True}]}</div>
+          <div class="who">
+            <div><b>Customer</b>priya.customer@prism.local</div>
+            <div><b>Employee</b>alex.employee@prism.local</div>
+            <div><b>HR staff</b>riya.hr@prism.local</div>
+            <div><b>Finance</b>arun.finance@prism.local · <code>Prism2026!</code></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>What to type in the live demo</h3>
+          <table>
+            <thead><tr><th>As</th><th>Ask</th><th>Expect</th></tr></thead>
+            <tbody>
+              <tr><td>priya</td><td>What personal data does Kohler collect?</td><td>Privacy answer</td></tr>
+              <tr><td>priya</td><td>What is Riya's casual-leave balance?</td><td>Denied / no-answer</td></tr>
+              <tr><td>alex</td><td>How many CL days can I carry?</td><td>Policy number, no names</td></tr>
+              <tr><td>riya</td><td>What is Priya's CL balance?</td><td>Named HR record</td></tr>
+              <tr class="pick"><td>arun</td><td>What is the CTC for grade M3?</td><td>Compensation row</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="footer"><span>RBAC</span><span>7 / 10</span></div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">Innovation pitch</p>
+      <h1>More than a chatbot with a vector DB</h1>
+    </div>
+    <div class="innov">
+      <div class="tiles">
+        <div class="tile">
+          <h3>Bring your own document</h3>
+          <p>PDF / DOCX / TXT mid-chat into <code>prism_uploads</code>. Point at the file and Meridian <code>policy_math</code> is skipped, so a fake INR table cannot override the user's own policy. Purged on delete and 24h TTL: a privacy story, not a limitation. The file never mixes into <code>prism_kb</code>.</p>
+        </div>
+        <div class="tile">
+          <h3>CanonicalAnswer → five formats</h3>
+          <p>Prose, JSON, XML, Excel, email from one stored object. Reformats never re-ask the 7B and never re-retrieve. The JSON on the right is the same Orion metro per-diem (INR 3,250), not a second generation. Click JSON / XML / Excel / Email in the bar: same object, five skins.</p>
+        </div>
+        <div class="tile">
+          <h3>EPA water callout</h3>
+          <p>Leak / drip / running-toilet Support answers get labeled liters/day from WaterSense figures: the same "math in code, not in the prompt" pattern as leave carry-forward and INR bands. A dripping faucet is not a 7B guess at gallons. The label is computed, then attached to the CanonicalAnswer.</p>
+        </div>
+        <div class="tile">
+          <h3>Voice + cited prompts</h3>
+          <p>Mic + speak in Chrome/Edge. Every reply shows retrieved source URLs and a workflow id that maps 1:1 onto <code>docs/prompts.md</code>. The jury can audit what was actually prompted, including the refuse and policy_math short-circuits that never call the 7B.</p>
+        </div>
+      </div>
+      <div class="shot-frame fit">
+        <div class="shot-chrome"><b>Live UI</b><span>Upload · Orion per diem as JSON</span></div>
+        <img src="screenshot_format_json.png" alt="Same answer as JSON after upload" />
+      </div>
+    </div>
+    <div class="footer"><span>Innovation</span><span>8 / 10</span></div>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">Evidence</p>
+      <h1>Numbers a jury can re-run from a clone</h1>
+    </div>
+    <div class="metrics">
+      <div class="metric"><div class="n">92.1%</div><div class="l">Domain routing · 40 questions</div></div>
+      <div class="metric"><div class="n">100%</div><div class="l">Retrieval hit@5</div></div>
+      <div class="metric"><div class="n">39/39</div><div class="l">Stress harness PASS</div></div>
+      <div class="metric"><div class="n">76 ms</div><div class="l">Avg routing latency</div></div>
+    </div>
+    <div class="evi">
+      <table>
+        <thead><tr><th>Category</th><th>n</th><th>Result</th><th>What it actually hits</th></tr></thead>
+        <tbody>
+          <tr><td>Numeric band exactness</td><td>5</td><td class="pass">PASS</td><td>₹25,001 / ₹24,999 · CL carry-forward · leave-year dates</td></tr>
+          <tr><td>Cross-domain multi-hop</td><td>3</td><td class="pass">PASS</td><td>Termination + expense · faucet liability · loaded privacy</td></tr>
+          <tr><td>Silent domain switch</td><td>3</td><td class="pass">PASS</td><td>Training → reimburse · HR → faucet · toilet warranty</td></tr>
+          <tr><td>Ambiguity / clarify</td><td>3</td><td class="pass">PASS</td><td>Ask instead of guessing the domain</td></tr>
+          <tr><td>12-turn memory</td><td>1</td><td class="pass">PASS</td><td>Carry-forward then draft email</td></tr>
+          <tr><td>Hallucination honesty</td><td>5</td><td class="pass">PASS</td><td>Fake model · FX rates · leading numbers · invite-to-guess</td></tr>
+          <tr><td>Jailbreak / injection</td><td>7</td><td class="pass">PASS</td><td>CFO override · developer mode · system-tag · VIP exception</td></tr>
+          <tr><td>Five output formats</td><td>6</td><td class="pass">PASS</td><td>Canonical consistency · Excel · hostile email · yes/no</td></tr>
+          <tr><td>Citation ⊆ retrieved URLs</td><td>1</td><td class="pass">PASS</td><td>No invented source_url</td></tr>
+          <tr><td>RBAC smoke + UX + latency</td><td>5</td><td class="pass">PASS</td><td>Role denials · session titles · 20-turn sweep</td></tr>
+        </tbody>
+      </table>
+      <div class="card">
+        <h3>Re-run from a clone</h3>
+        <pre class="cmd">uv run python -m eval.stress.harness
+uv run python -m eval.stress.rbac_smoke
+uv run python -m eval.routing_smoke</pre>
+        <p>API already on <code>:8000</code>. Sequential, 8GB VRAM. Report lands in <code>backend/eval/results/stress/</code>.</p>
+        <h3>What 39/39 is not</h3>
+        <p>Not a leaderboard score. It is a regression harness the jury can clone: numeric edges, policy-tamper, format fan-out, and "I don't know" when the corpus is silent.</p>
+        <h3>Golden slice (12 Qs)</h3>
+        <p>qwen2.5:7b: 100% schema · 74% fact recall · 67% finance exactness · 6.4s · 5143 MB. The number that decided the default over Llama/Mistral is finance exactness, not generic MMLU.</p>
+      </div>
+    </div>
+    <div class="footer"><span>Evidence</span><span>9 / 10</span></div>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide">
+    <div class="head">
+      <p class="kicker">Shipped · ask</p>
+      <h1>Clone it. Log in. Ask across five domains.</h1>
+    </div>
+    <div class="clone">
+      <div class="card">
+        <div class="n">01 · Install</div>
+        <pre class="cmd">git clone .../Prism
+.\scripts\setup.ps1
+# deps, Ollama models, frontend</pre>
+      </div>
+      <div class="card">
+        <div class="n">02 · Index</div>
+        <pre class="cmd">python -m prism.ingest.build_index
+# ~519 chunks → prism_kb
+# BM25 sidecar + role_* flags</pre>
+      </div>
+      <div class="card">
+        <div class="n">03 · Run</div>
+        <pre class="cmd">.\start.ps1
+# UI   localhost:5173
+# API  localhost:8000</pre>
+      </div>
+    </div>
+    <p class="ask">Prism as the internal + external knowledge front door - five domains, one upload, any format, on-device, role-aware.</p>
+    <div class="ask-grid">
+      <table>
+        <thead><tr><th>Role</th><th>Login</th><th>Password</th></tr></thead>
+        <tbody>
+          <tr><td>Customer</td><td><code>priya.customer@prism.local</code></td><td><code>Prism2026!</code></td></tr>
+          <tr><td>Employee</td><td><code>alex.employee@prism.local</code></td><td><code>Prism2026!</code></td></tr>
+          <tr><td>HR staff</td><td><code>riya.hr@prism.local</code></td><td><code>Prism2026!</code></td></tr>
+          <tr class="pick"><td>Finance</td><td><code>arun.finance@prism.local</code></td><td><code>Prism2026!</code></td></tr>
+        </tbody>
+      </table>
+      <div class="card">
+        <h3>Where the rest of the packet lives</h3>
+        <p>Architecture, prompts, decisions, demo script: PDFs in <code>docs/pdf/</code>. Workflow chip on every reply maps to <code>docs/prompts.md</code>. Built by Aryan Dani · aryandani.com · individual Track 3. Assist/kohler.com crawled read-only; synthetic HR/Finance disclosed.</p>
+      </div>
+    </div>
+    <div class="live">
+      <div class="card"><h3>Ask · Finance exactness</h3><p>An employee submits an expense claim for exactly ₹25,001. Who needs to approve it? Then ₹24,999.</p></div>
+      <div class="card"><h3>Ask · Upload → JSON</h3><p>Attach Orion travel policy. "Domestic per diem for metro cities?" then "give that as JSON."</p></div>
+      <div class="card"><h3>Ask · RBAC deny</h3><p>Log in as priya.customer and ask for a named leave balance. The corpus exists - the <code>where</code> clause hides it.</p></div>
+    </div>
+    <div class="footer"><span>Built by Aryan Dani · aryandani.com</span><span>10 / 10</span></div>
+  </section>
+
+</body>
+</html>

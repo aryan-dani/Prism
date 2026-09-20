@@ -1,7 +1,7 @@
 # Prism â€” Architecture & Sourcing Decisions
 
 Running log of every non-obvious technical decision, why it was made, and what
-was verified before committing to it. Written as we go, not reconstructed at
+was verified before committing to it. Written as I go, not reconstructed at
 the end â€” timestamps are approximate build order, not wall-clock.
 
 For the **system map** (components, five knowledge bases, turn pipeline,
@@ -17,7 +17,7 @@ this, not against a generic "8GB card" assumption.
 
 - Size: ~274MB on disk, small residual VRAM footprint when loaded alongside a
   quantized 7-8B generation model.
-- 768-dimensional embeddings, 8k token context â€” comfortably covers our
+- 768-dimensional embeddings, 8k token context: comfortably covers the
   largest single chunk (~1,800 tokens by design, see `MAX_CHUNK_TOKENS`).
 - Already available locally (`ollama list` showed it pre-installed), zero
   additional download cost.
@@ -272,7 +272,7 @@ the query was anaphora-expanded, run one extra `top_k=3` retrieval on the raw
 follow-up alone (same domain filter), merge, and guarantee the top focus hit
 ## 12. Water-waste estimator is code, not a prompt
 
-Kohler's 10% rubric line is water conservation. The same reason we do leave
+Kohler's 10% rubric line is water conservation. The same reason I do leave
 and â‚¹-band math in `policy_math.py` applies here: published EPA figures
 (WaterSense 3,000 gal/year drip; Fix-a-Leak ~200 gal/day running toilet)
 should not be left for the 7B model to approximate. `water_math.py` matches

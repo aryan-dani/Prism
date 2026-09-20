@@ -1,0 +1,10 @@
+flowchart LR
+    Q["Question"] --> Vague{"Vague cold start?"}
+    Vague -->|yes| Ask["Ask with domain labels"]
+    Vague -->|no| Blend["Anchors 0.7 + votes 0.3"]
+    Blend --> Tight{"Margin under 0.04?"}
+    Tight -->|yes + sticky| Stay["Stay sticky"]
+    Tight -->|yes no sticky| Ask
+    Tight -->|no| Route["Clear winner"]
+    Ask --> Reply["User picks a domain"]
+    Reply --> Force["Force domain + merge query"]

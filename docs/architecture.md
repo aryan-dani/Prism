@@ -1,10 +1,12 @@
 # Prism — System Architecture
 
 This document is the map of the repository: what Prism does, where each of the
-five knowledge bases comes from, how a chat turn runs, and how we plan to
+five knowledge bases comes from, how a chat turn runs, and how I plan to
 improve the system. Decision *rationale* (why Chroma, why Qwen, VRAM math)
 lives in [`decisions.md`](decisions.md). Prompt / non-LLM workflow inventory
-lives in [`prompts.md`](prompts.md).
+lives in [`prompts.md`](prompts.md). For a teaching walkthrough with worked
+examples (clarify, RBAC, policy math), see [`system_guide.md`](system_guide.md)
+· [`pdf/system_guide.pdf`](pdf/system_guide.pdf).
 
 ---
 

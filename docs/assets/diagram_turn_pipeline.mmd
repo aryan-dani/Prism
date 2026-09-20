@@ -1,0 +1,11 @@
+flowchart LR
+    Msg["User message"] --> Early["Refuse / RBAC / policy_math / reformat"]
+    Early -->|done| Out["CanonicalAnswer"]
+    Early -->|continue| Route["Clarify or route"]
+    Route -->|ask| Ask["Clarifying question"]
+    Route -->|domain| Ret["Hybrid retrieve"]
+    Ret --> Conf{"Confident?"}
+    Conf -->|no| Honest["Honest no-answer"]
+    Conf -->|yes| Gen["One Ollama JSON + polish"]
+    Honest --> Out
+    Gen --> Out

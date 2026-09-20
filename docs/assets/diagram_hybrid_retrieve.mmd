@@ -1,0 +1,8 @@
+flowchart LR
+    Q["Query + role"] --> Dense["Chroma dense + role ACL"]
+    Q --> Sparse["BM25 over allowed IDs"]
+    Dense --> RRF["RRF K=60"]
+    Sparse --> RRF
+    RRF --> Floor{"Confidence floor?"}
+    Floor -->|pass| LLM["generate_answer"]
+    Floor -->|fail| Skip["no_context_answer"]

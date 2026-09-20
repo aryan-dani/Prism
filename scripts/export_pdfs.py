@@ -63,12 +63,10 @@ img.screenshot { max-width: 100%; border: 1px solid #d5cebf; margin: 0.6em 0; }
 """
 )
 
-# deck.md uses "---" between its 4 slides; force each onto its own page so
-# the exported PDF actually reads like a 4-slide deck, not a flowing doc.
-SLIDE_BREAK_CSS = "\nhr { page-break-after: always; border: none; margin: 0; }\n"
+# The visual jury deck, system handbook, and prompts PDF have their own exporters.
 
 
-def md_to_pdf(md_path: Path, pdf_path: Path, *, slide_breaks: bool = False) -> None:
+def md_to_pdf(md_path: Path, pdf_path: Path) -> None:
     text = md_path.read_text(encoding="utf-8")
     # Strip mermaid / overly complex fences for PDF friendliness
     text = re.sub(r"```mermaid[\s\S]*?```", "_([diagram omitted in PDF — see Markdown source])_", text)
@@ -88,8 +86,7 @@ def md_to_pdf(md_path: Path, pdf_path: Path, *, slide_breaks: bool = False) -> N
         text,
     )
     html_body = markdown2.markdown(text, extras=["tables", "fenced-code-blocks", "strike"])
-    css = CSS + (SLIDE_BREAK_CSS if slide_breaks else "")
-    html = f"<html><head><meta charset='utf-8'/><style>{css}</style></head><body>{html_body}</body></html>"
+    html = f"<html><head><meta charset='utf-8'/><style>{CSS}</style></head><body>{html_body}</body></html>"
     pdf_path.parent.mkdir(parents=True, exist_ok=True)
     with pdf_path.open("wb") as out:
         result = pisa.CreatePDF(html, dest=out, encoding="utf-8")
@@ -99,16 +96,17 @@ def md_to_pdf(md_path: Path, pdf_path: Path, *, slide_breaks: bool = False) -> N
 
 
 def main() -> None:
+    # deck.md / docs/pdf/deck.pdf are owned by scripts/export_deck.py
+    # system_guide.md / docs/pdf/system_guide.pdf are owned by
+    # scripts/export_system_guide.py
     targets = [
         DOCS / "architecture.md",
-        DOCS / "prompts.md",
         DOCS / "decisions.md",
         DOCS / "demo_script.md",
-        DOCS / "deck.md",
     ]
     for md in targets:
         if md.exists():
-            md_to_pdf(md, OUT / f"{md.stem}.pdf", slide_breaks=(md.stem == "deck"))
+            md_to_pdf(md, OUT / f"{md.stem}.pdf")
 
 
 if __name__ == "__main__":

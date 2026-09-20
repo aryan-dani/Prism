@@ -72,6 +72,13 @@ backend/eval/_*.py
 !backend/eval/__init__.py
 !backend/eval/**/__init__.py
 
+# Deck export previews
+docs/assets/_deck_preview/
+docs/assets/_system_guide.html
+docs/assets/_prompts.html
+docs/assets/_prompts_preview/
+docs/assets/_render_*.html
+
 # Keep committed (do NOT ignore):
 #   backend/data/processed/*.jsonl
 #   backend/data/synthetic/*.md

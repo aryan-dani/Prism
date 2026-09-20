@@ -1,0 +1,11 @@
+flowchart TD
+    Assist["crawl_assist sitemap + polite fetch"] --> ParseA["parse __NEXT_DATA__ displayCard"]
+    Legal["parse_kohler_legal Privacy T and C"] --> ParseL["heading-boundary HTML chunks"]
+    Synth["build_synthetic HR Finance markdown"] --> ParseS["heading chunks is_synthetic True"]
+    ParseA --> JSONL["data/processed/*.jsonl"]
+    ParseL --> JSONL
+    ParseS --> JSONL
+    JSONL --> Build["build_index merge + dedupe"]
+    Build --> Embed["nomic-embed-text batch embed"]
+    Embed --> Chroma["Chroma collection prism_kb"]
+    Embed --> BM25["bm25_index.pkl sidecar"]

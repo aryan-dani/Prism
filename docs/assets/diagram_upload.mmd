@@ -1,0 +1,9 @@
+flowchart TD
+    File["User uploads PDF DOCX TXT CSV"] --> Parse["Parse + chunk at 450 tokens"]
+    Parse --> UpCol["Separate collection prism_uploads"]
+    UpCol --> Filter["Always filter by session_id"]
+    Query["User question"] --> Gate{"Points at file OR upload distance within margin of KB?"}
+    Gate -->|"yes"| UseUp["Answer from upload chunks only"]
+    Gate -->|"no"| UseKB["Fall through to five KBs"]
+    UseUp --> SkipMath["Skip Meridian policy_math"]
+    Filter --> Purge["Purge on session delete remove or 24h TTL"]
