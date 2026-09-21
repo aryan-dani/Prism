@@ -1,6 +1,6 @@
 # Prism
 
-**Kohler Unified Enterprise AI Agent** · Track 3 · Kohler-MITWPU AI Research Lab
+**Unified Enterprise AI Agent** · Track 3 · MITWPU AI Research Lab
 
 Built by **Aryan Dani**. Individual submission.
 

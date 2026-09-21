@@ -638,7 +638,7 @@ export default function App({
         <div className="brand">
           <button type="button" className="brand-home" onClick={onHome} title="Back to overview">
             <div className="brand-mark">Prism</div>
-            <div className="brand-sub">Kohler unified enterprise AI · local Ollama</div>
+            <div className="brand-sub">Unified enterprise AI · local Ollama</div>
           </button>
           <div className="user-chip">
             <span className="role-badge">

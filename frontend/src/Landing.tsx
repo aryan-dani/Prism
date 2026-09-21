@@ -51,7 +51,7 @@ export default function Landing({ user, onEnter, onTryQuestion, onLogout }: Prop
       </header>
 
       <section className="landing-hero">
-        <p className="landing-kicker">Kohler Unified Enterprise AI · Track 3</p>
+        <p className="landing-kicker">Unified Enterprise AI · Track 3</p>
         <h1>One query, any format.</h1>
         <p className="landing-lead">
           A local agent over HR, Finance, Support, Privacy, and Legal, plus the file you drop in
@@ -112,7 +112,7 @@ export default function Landing({ user, onEnter, onTryQuestion, onLogout }: Prop
           aryandani.com
         </a>
         {' · '}
-        Kohler-MITWPU AI Research Lab, Track 3
+        MITWPU AI Research Lab, Track 3
       </footer>
     </div>
   )

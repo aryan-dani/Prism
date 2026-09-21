@@ -60,7 +60,7 @@ export default function Login({ onLoggedIn }: Props) {
     <div className="login-page">
       <div className="login-card">
         <div className="brand-mark">Prism</div>
-        <p className="login-kicker">Kohler Unified Enterprise AI · Track 3</p>
+        <p className="login-kicker">Unified Enterprise AI · Track 3</p>
         <h1>Sign in</h1>
         <p className="login-lead">
           Role-gated knowledge bases. Access is enforced at retrieval, not just the UI.
