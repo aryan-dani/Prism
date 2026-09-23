@@ -1,0 +1,42 @@
+# UI + API in containers. Ollama stays on the host GPU.
+# From the repo root, with Ollama already running:
+#   docker compose up --build
+# UI:  http://localhost:8080
+# API: http://localhost:8000/docs
+
+services:
+  api:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      OLLAMA_HOST: http://host.docker.internal:11434
+      PRISM_GEN_MODEL: qwen2.5:7b-instruct
+      PRISM_EMBED_MODEL: nomic-embed-text
+      PRISM_TITLE_MODEL: qwen2.5:3b-instruct
+    volumes:
+      # Reuses the local Chroma index, sessions DB, and uploads.
+      - ./backend/data:/app/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 180s
+
+  web:
+    build:
+      context: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api

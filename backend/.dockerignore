@@ -1,0 +1,12 @@
+.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+data/chroma
+data/uploads
+data/raw
+data/sessions.db
+data/sessions.db-*
+eval
+.git
+*.md
