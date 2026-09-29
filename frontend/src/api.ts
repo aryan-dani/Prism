@@ -376,3 +376,25 @@ export async function downloadExcelBlob(sessionId: string): Promise<Blob> {
   if (!res.ok) throw new Error(await res.text())
   return res.blob()
 }
+
+export type SavedPrompt = {
+  id: string
+  title: string
+  body: string
+  created_at: string
+}
+
+export function listSavedPrompts() {
+  return request<SavedPrompt[]>('/api/prompts')
+}
+
+export function createSavedPrompt(body: string, title?: string) {
+  return request<SavedPrompt>('/api/prompts', {
+    method: 'POST',
+    body: JSON.stringify({ body, title: title || null }),
+  })
+}
+
+export function deleteSavedPrompt(id: string) {
+  return request<{ ok: boolean }>(`/api/prompts/${id}`, { method: 'DELETE' })
+}

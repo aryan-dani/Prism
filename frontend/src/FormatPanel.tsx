@@ -86,17 +86,19 @@ export default function FormatPanel({ format, content, onClose }: Props) {
 
       {format === 'email' && email ? (
         <>
-          <dl className="email-meta">
-            <div>
-              <dt>To</dt>
-              <dd>Choose a recipient in your mail app</dd>
-            </div>
-            <div>
-              <dt>Subject</dt>
-              <dd>{email.subject}</dd>
-            </div>
-          </dl>
-          <div className="email-body">{email.body}</div>
+          <div className="format-panel-scroll">
+            <dl className="email-meta">
+              <div>
+                <dt>To</dt>
+                <dd>Choose a recipient in your mail app</dd>
+              </div>
+              <div>
+                <dt>Subject</dt>
+                <dd>{email.subject}</dd>
+              </div>
+            </dl>
+            <div className="email-body">{email.body}</div>
+          </div>
           <div className="format-panel-cta">
             <a className="format-panel-primary" href={mailHref} onClick={openMail}>
               Open in Mail
@@ -111,7 +113,7 @@ export default function FormatPanel({ format, content, onClose }: Props) {
           Saved <code>prism_answer.xlsx</code>. Open it in Excel or Google Sheets.
         </p>
       ) : (
-        <pre className="format-code">
+        <pre className="format-code format-panel-scroll">
           <code>{display}</code>
         </pre>
       )}

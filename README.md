@@ -97,33 +97,22 @@ Expected: **~519 chunks** indexed into collection `prism_kb` (includes HR record
 
 ### 3. Run
 
+Windows — one command starts Docker Desktop (if the engine is down), Ollama on the host, and the UI + API containers, then opens the UI:
+
 ```powershell
 .\start.ps1
-# Linux/macOS: bash scripts/start.sh
-```
-
-Open **http://localhost:5173**. Sign in with a demo account (printed on the login card).
-
-### Docker
-
-UI and API run in containers. **Ollama stays on the host** so the 7B keeps the GPU.
-
-Ollama must accept connections from Docker, not only from `127.0.0.1`. Set a user environment variable, fully quit Ollama, then start it again:
-
-```text
-OLLAMA_HOST=0.0.0.0:11434
-```
-
-From the repo root:
-
-```powershell
-docker compose up --build
 ```
 
 - UI: http://localhost:8080
 - API docs: http://localhost:8000/docs
+- Stop: `docker compose down`
+- Logs: `docker compose logs -f`
+
+**Ollama stays on the host GPU.** The API container talks to it at `host.docker.internal:11434`. If health says Ollama is unreachable, set a user environment variable `OLLAMA_HOST=0.0.0.0:11434`, fully quit Ollama, and run `.\start.ps1` again.
 
 `./backend/data` is mounted into the API container, so an existing Chroma index is reused. If `data/chroma` is empty, the API container embeds the processed JSONL on first start (Ollama must already be up; this takes several minutes).
+
+Linux/macOS dev servers (not Docker): `bash scripts/start.sh`, then open http://localhost:5173.
 
 **Smoke-test login (full domain access):** `alex.employee@prism.local` / `Prism2026!`
 

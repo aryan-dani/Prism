@@ -18,7 +18,7 @@ const DOMAINS = [
 ]
 
 const STEPS = [
-  { n: '1', title: 'Ask', body: 'One question across five Kohler domains, or drop a PDF.' },
+  { n: '1', title: 'Ask', body: 'One question across five domains, or drop a PDF.' },
   { n: '2', title: 'Route', body: 'Anchors pick HR vs Finance vs Support. No extra LLM.' },
   { n: '3', title: 'Retrieve', body: 'Hybrid Chroma + BM25, then one local generation call.' },
   { n: '4', title: 'Render', body: 'Same answer as prose, JSON, XML, Excel, or email.' },
@@ -41,30 +41,32 @@ export default function Landing({ user, onEnter, onTryQuestion, onLogout }: Prop
           <span className="role-badge" title={user.email}>
             {user.name} · {user.role.replaceAll('_', ' ')}
           </span>
-          <button type="button" className="landing-cta ghost" onClick={onLogout}>
+          <button type="button" className="btn btn-ghost" onClick={onLogout}>
             Log out
           </button>
-          <button type="button" className="landing-cta ghost" onClick={onEnter}>
+          <button type="button" className="btn btn-primary" onClick={onEnter}>
             Open chat
           </button>
         </div>
       </header>
 
-      <section className="landing-hero">
-        <p className="landing-kicker">Unified Enterprise AI · Track 3</p>
+      <section className="landing-hero anim-fade-up">
+        <div className="brand-mark landing-hero-brand">Prism</div>
         <h1>One query, any format.</h1>
         <p className="landing-lead">
-          A local agent over HR, Finance, Support, Privacy, and Legal, plus the file you drop in
-          chat. Role-gated retrieval, cited sources, and five output skins from one answer. Nothing
-          leaves the laptop.
+          A local agent over HR, Finance, Support, Privacy, and Legal — plus the file you drop in
+          chat. Role-gated retrieval. Cited sources. Nothing leaves the laptop.
         </p>
         <div className="landing-actions">
-          <button type="button" className="landing-cta" onClick={onEnter}>
+          <button type="button" className="btn btn-primary landing-cta-lg" onClick={onEnter}>
             Try the live demo
           </button>
-          <span className="landing-meta">Ollama on an RTX 5070 · voice in Chrome or Edge</span>
+          <span className="landing-meta">Runs on Ollama · voice in Chrome or Edge</span>
         </div>
-        <div className="landing-stats" aria-label="Product proof">
+      </section>
+
+      <section className="landing-proof" aria-label="Product proof">
+        <div className="landing-stats">
           {STATS.map((s) => (
             <div key={s.label} className="landing-stat">
               <b>{s.n}</b>
@@ -75,22 +77,28 @@ export default function Landing({ user, onEnter, onTryQuestion, onLogout }: Prop
       </section>
 
       <section className="landing-domains" aria-label="Knowledge domains">
-        {DOMAINS.map((d) => (
-          <article key={d.id} className={`landing-card domain-${d.id}`}>
-            <h2>{d.title}</h2>
-            <p>{d.blurb}</p>
-          </article>
-        ))}
+        <p className="section-label">Knowledge domains</p>
+        <div className="landing-domain-band">
+          {DOMAINS.map((d) => (
+            <article key={d.id} className={`landing-domain domain-${d.id}`}>
+              <h2>{d.title}</h2>
+              <p>{d.blurb}</p>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="landing-steps" aria-label="How it works">
-        {STEPS.map((s) => (
-          <article key={s.n} className="landing-step">
-            <span className="landing-n">{s.n}</span>
-            <h3>{s.title}</h3>
-            <p>{s.body}</p>
-          </article>
-        ))}
+        <p className="section-label">How it works</p>
+        <div className="landing-steps-row">
+          {STEPS.map((s) => (
+            <article key={s.n} className="landing-step">
+              <span className="landing-n">{s.n}</span>
+              <h3>{s.title}</h3>
+              <p>{s.body}</p>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="landing-try">

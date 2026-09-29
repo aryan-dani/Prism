@@ -43,6 +43,11 @@ from prism.core.config import (
 from prism.core.memory import UploadedDocRef, get_session_store
 from prism.core.rbac import DEMO_PASSWORD, SEED_USERS, domains_for_role
 from prism.core.renderers import available_formats, render as render_format
+from prism.core.saved_prompts import (
+    create_saved_prompt,
+    delete_saved_prompt,
+    list_saved_prompts,
+)
 from prism.core.store import get_store
 from prism.core.titler import generate_title_fast, maybe_retitle
 from prism.core.uploads import get_upload_store
@@ -91,6 +96,18 @@ class UploadResponse(BaseModel):
     status: str
     chunk_count: int
     uploaded_docs: list[dict]
+
+
+class CreateSavedPromptRequest(BaseModel):
+    body: str
+    title: str | None = None
+
+
+class SavedPromptResponse(BaseModel):
+    id: str
+    title: str
+    body: str
+    created_at: str
 
 
 def _require_session(session_id: str, user: AuthUser):
@@ -205,6 +222,26 @@ def denials(user: AuthUser = Depends(get_current_user)):
     if user.role not in ("hr_staff", "finance_staff"):
         raise HTTPException(403, "Access denials log is visible to HR and Finance staff only")
     return {"denials": list_denials(50)}
+
+
+@router.get("/prompts", response_model=list[SavedPromptResponse])
+def get_saved_prompts(user: AuthUser = Depends(get_current_user)):
+    return list_saved_prompts(user.id)
+
+
+@router.post("/prompts", response_model=SavedPromptResponse)
+def post_saved_prompt(req: CreateSavedPromptRequest, user: AuthUser = Depends(get_current_user)):
+    try:
+        return create_saved_prompt(user.id, req.body, req.title)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/prompts/{prompt_id}")
+def remove_saved_prompt(prompt_id: str, user: AuthUser = Depends(get_current_user)):
+    if not delete_saved_prompt(user.id, prompt_id):
+        raise HTTPException(404, "saved prompt not found")
+    return {"ok": True}
 
 
 @router.post("/sessions", response_model=CreateSessionResponse)

@@ -51,11 +51,7 @@ function Root() {
   }, [])
 
   if (checking) {
-    return (
-      <div className="login-page">
-        <div className="login-card">Checking session…</div>
-      </div>
-    )
+    return <Login checking onLoggedIn={() => {}} />
   }
 
   if (!user) {
