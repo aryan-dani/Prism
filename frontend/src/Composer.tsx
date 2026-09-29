@@ -159,8 +159,8 @@ export default function Composer({
             listening
               ? 'Listening…'
               : uploads.length
-                ? 'Ask about the attached file, or anything across the five domains'
-                : 'Ask about leave, expenses, warranties, privacy… or drop a file'
+                ? 'Ask about the attached file'
+                : 'Ask a question, or drop a file'
           }
           onChange={(e) => onDraftChange(e.target.value)}
           onKeyDown={(e) => {

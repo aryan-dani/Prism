@@ -404,11 +404,20 @@ a:focus-visible {
 .save-prompt-btn {
   flex: 0 0 auto;
   width: auto;
-  min-width: 3.4rem;
-  padding: 0 0.85rem;
-  font-size: 0.72rem;
+  min-width: 0;
+  height: 36px;
+  padding: 0 0.55rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
   font-weight: 700;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+}
+
+.save-prompt-btn:not(:disabled):hover {
+  background: transparent;
+  color: var(--accent);
 }
 
 .session-row {
@@ -963,9 +972,9 @@ a:focus-visible {
 }
 
 .icon-btn {
-  flex: 0 0 40px;
-  width: 40px;
-  height: 40px;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -986,6 +995,15 @@ a:focus-visible {
 .icon-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.composer .save-prompt-btn {
+  width: auto;
+  min-width: 0;
+  padding: 0 0.55rem;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .mic-btn.listening {
@@ -1337,7 +1355,6 @@ a:focus-visible {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 1.35rem;
-  max-width: 58rem;
 }
 
 @media (max-width: 800px) {
@@ -1393,7 +1410,6 @@ a:focus-visible {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.55rem;
-  max-width: 56rem;
   align-items: stretch;
 }
 
@@ -1412,7 +1428,7 @@ a:focus-visible {
 }
 
 .landing-try .suggestion-hint {
-  max-width: 56rem;
+  max-width: none;
 }
 
 .landing-footer {
@@ -1443,15 +1459,25 @@ a:focus-visible {
 
 .composer {
   display: flex;
-  align-items: flex-end;
-  gap: 0.55rem;
+  align-items: center;
+  gap: 0.35rem;
   width: min(var(--dock-w), 100%);
-  padding: 0.45rem 0.5rem 0.45rem 0.45rem;
+  padding: 0.35rem 0.4rem 0.35rem 0.35rem;
   border: 1px solid var(--line);
-  border-radius: 28px;
-  background: rgba(250, 247, 241, 0.97);
-  box-shadow: var(--shadow);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  border-radius: 999px;
+  background: var(--panel-strong);
+  box-shadow: var(--elev-1);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, border-radius 0.15s ease;
+}
+
+.composer:focus-within {
+  border-color: #9ecabb;
+  box-shadow: var(--focus), var(--elev-1);
+}
+
+.composer:has(textarea.is-multiline) {
+  align-items: flex-end;
+  border-radius: 22px;
 }
 
 .composer.is-listening {
@@ -1471,9 +1497,11 @@ a:focus-visible {
   flex-shrink: 0;
 }
 
-.attach {
-  border-style: dashed;
+.composer .attach {
+  border: 0;
   background: transparent;
+  box-shadow: none;
+  color: var(--muted);
 }
 
 /* Attached-document chips (ephemeral "uploaded" domain) */
@@ -1553,18 +1581,30 @@ a:focus-visible {
 .composer textarea {
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 40px;
+  height: 36px;
+  min-height: 36px;
   max-height: 160px;
   resize: none;
-  overflow-y: auto;
+  overflow: hidden;
   border: 0;
   outline: none;
+  box-shadow: none;
   background: transparent;
   color: var(--ink);
-  padding: 0.55rem 0.4rem;
-  line-height: 1.4;
-  font-size: 1rem;
-  field-sizing: content;
+  padding: 0.4rem 0.25rem;
+  line-height: 1.45;
+  font-size: 0.98rem;
+}
+
+.composer textarea:focus,
+.composer textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.composer textarea.is-multiline {
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .composer textarea::placeholder {
@@ -1573,8 +1613,8 @@ a:focus-visible {
 
 .send {
   flex: 0 0 auto;
-  min-width: 5.4rem;
-  height: 40px;
+  min-width: 4.6rem;
+  height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1591,11 +1631,32 @@ a:focus-visible {
   cursor: not-allowed;
 }
 
+.thread-format {
+  align-self: stretch;
+  width: 100%;
+  max-width: none;
+  margin: 0.15rem 0 0.35rem;
+}
+
+.thread-format .format-panel {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  border-radius: var(--radius);
+  background: var(--panel-strong);
+  box-shadow: none;
+}
+
+.thread-format .format-panel-scroll,
+.thread-format .format-code {
+  max-height: 28rem;
+}
+
 .format-dock {
   flex-shrink: 0;
-  width: min(var(--dock-w), calc(100% - 3rem));
-  max-width: 100%;
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
   padding: 0 1.5rem 0.55rem;
   min-height: 0;
 }
@@ -1771,9 +1832,10 @@ a:focus-visible {
 
 .status-line {
   width: min(var(--dock-w), 100%);
-  margin-top: 0.45rem;
+  margin-top: 0.55rem;
   min-height: 1.1rem;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
   color: var(--muted);
   text-align: center;
 }

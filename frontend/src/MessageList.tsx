@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import AnswerBody from './AnswerBody'
+import FormatPanel from './FormatPanel'
 import { SUGGESTION_HINT } from './suggestions'
 import {
   confidenceTone,
@@ -36,6 +37,8 @@ type Props = {
   speakingId: string | null
   showAllSources: Record<string, boolean>
   ttsSupported: boolean
+  formatView: { format: string; content: string } | null
+  onCloseFormat: () => void
   onSendSuggestion: (text: string) => void
   onCopy: (m: Message) => void
   onSpeak: (m: Message) => void
@@ -49,6 +52,8 @@ export default function MessageList({
   speakingId,
   showAllSources,
   ttsSupported,
+  formatView,
+  onCloseFormat,
   onSendSuggestion,
   onCopy,
   onSpeak,
@@ -58,7 +63,7 @@ export default function MessageList({
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, formatView])
 
   return (
     <section className="messages">
@@ -194,6 +199,11 @@ export default function MessageList({
             )}
           </div>
         ))
+      )}
+      {formatView && (
+        <div className="thread-format anim-dock-in">
+          <FormatPanel format={formatView.format} content={formatView.content} onClose={onCloseFormat} />
+        </div>
       )}
       <div ref={bottomRef} />
     </section>

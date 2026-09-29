@@ -23,7 +23,6 @@ import {
 } from './api'
 import ChatHeader from './ChatHeader'
 import Composer from './Composer'
-import FormatPanel from './FormatPanel'
 import MessageList from './MessageList'
 import Sidebar from './Sidebar'
 import { suggestionsForRole } from './suggestions'
@@ -146,7 +145,8 @@ export default function App({
     if (!el) return
     el.style.height = 'auto'
     const next = Math.min(el.scrollHeight, 160)
-    el.style.height = `${Math.max(next, 40)}px`
+    el.style.height = `${Math.max(next, 36)}px`
+    el.classList.toggle('is-multiline', next > 48)
   }, [draft])
 
   useEffect(() => {
@@ -578,13 +578,9 @@ export default function App({
           onToggleSources={(id) =>
             setShowAllSources((prev) => ({ ...prev, [id]: !prev[id] }))
           }
+          formatView={panel}
+          onCloseFormat={() => setPanel(null)}
         />
-
-        {panel && (
-          <div className="format-dock anim-dock-in" aria-live="polite">
-            <FormatPanel format={panel.format} content={panel.content} onClose={() => setPanel(null)} />
-          </div>
-        )}
 
         <Composer
           draft={draft}

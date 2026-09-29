@@ -224,12 +224,30 @@ Clear-NonDockerPort -Port 8000 -ServiceName "API"
 Clear-NonDockerPort -Port 8080 -ServiceName "UI"
 Clear-NonDockerPort -Port 5173 -ServiceName "old Vite dev server"
 
+function Test-PrismImages {
+    $names = @("prism-api", "prism-web")
+    foreach ($name in $names) {
+        $id = & $docker images -q $name 2>$null
+        if (-not $id) { return $false }
+    }
+    return $true
+}
+
 Write-Step "Building and starting containers (this reuses cached image layers) ..."
 & $docker compose --project-directory $root up -d --build --remove-orphans
 if ($LASTEXITCODE -ne 0) {
-    Write-Step "docker compose failed. Recent API logs:" "Red"
-    & $docker compose --project-directory $root logs --tail 60 api
-    throw "Prism containers did not start."
+    if (Test-PrismImages) {
+        Write-Step "Registry unreachable during rebuild. Starting existing local images instead ..." "Yellow"
+        & $docker compose --project-directory $root up -d --no-build --remove-orphans
+    }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Step "docker compose failed. Recent API logs:" "Red"
+        & $docker compose --project-directory $root logs --tail 60 api
+        Write-Host "    If the error mentions registry-1.docker.io / no such host, Docker Desktop lost DNS." -ForegroundColor Yellow
+        Write-Host "    Fix: check Wi‑Fi/VPN, restart Docker Desktop, then rerun .\start.ps1." -ForegroundColor Yellow
+        Write-Host "    Cached images are enough for demos: docker compose up -d --no-build" -ForegroundColor Yellow
+        throw "Prism containers did not start."
+    }
 }
 
 Write-Step "Waiting for API health ..."
