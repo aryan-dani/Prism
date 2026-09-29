@@ -47,6 +47,7 @@ from prism.core.saved_prompts import (
     create_saved_prompt,
     delete_saved_prompt,
     list_saved_prompts,
+    update_saved_prompt_title,
 )
 from prism.core.store import get_store
 from prism.core.titler import generate_title_fast, maybe_retitle
@@ -108,6 +109,11 @@ class SavedPromptResponse(BaseModel):
     title: str
     body: str
     created_at: str
+    duplicate: bool = False
+
+
+class RenameSavedPromptRequest(BaseModel):
+    title: str
 
 
 def _require_session(session_id: str, user: AuthUser):
@@ -226,7 +232,7 @@ def denials(user: AuthUser = Depends(get_current_user)):
 
 @router.get("/prompts", response_model=list[SavedPromptResponse])
 def get_saved_prompts(user: AuthUser = Depends(get_current_user)):
-    return list_saved_prompts(user.id)
+    return list_saved_prompts(user.id, user.role)
 
 
 @router.post("/prompts", response_model=SavedPromptResponse)
@@ -235,6 +241,21 @@ def post_saved_prompt(req: CreateSavedPromptRequest, user: AuthUser = Depends(ge
         return create_saved_prompt(user.id, req.body, req.title)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+@router.patch("/prompts/{prompt_id}", response_model=SavedPromptResponse)
+def rename_saved_prompt(
+    prompt_id: str,
+    req: RenameSavedPromptRequest,
+    user: AuthUser = Depends(get_current_user),
+):
+    try:
+        updated = update_saved_prompt_title(user.id, prompt_id, req.title)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if updated is None:
+        raise HTTPException(404, "saved prompt not found")
+    return updated
 
 
 @router.delete("/prompts/{prompt_id}")

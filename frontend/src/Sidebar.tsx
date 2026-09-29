@@ -1,3 +1,4 @@
+import { useMemo, useRef, useState } from 'react'
 import type { AuthUser, Health, SavedPrompt, SessionSummary } from './api'
 import { displayTitle, domainLabel } from './chatUtils'
 
@@ -25,6 +26,8 @@ type Props = {
   onSelectSession: (id: string) => void
   onRemoveSession: (id: string) => void
   onUsePrompt: (p: SavedPrompt) => void
+  onRunPrompt: (p: SavedPrompt) => void
+  onRenamePrompt: (id: string, title: string) => void
   onRemovePrompt: (id: string) => void
 }
 
@@ -45,8 +48,29 @@ export default function Sidebar({
   onSelectSession,
   onRemoveSession,
   onUsePrompt,
+  onRunPrompt,
+  onRenamePrompt,
   onRemovePrompt,
 }: Props) {
+  const [promptQuery, setPromptQuery] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [titleDraft, setTitleDraft] = useState('')
+  const skipRenameBlur = useRef(false)
+
+  const filteredPrompts = useMemo(() => {
+    const q = promptQuery.trim().toLowerCase()
+    if (!q) return savedPrompts
+    return savedPrompts.filter(
+      (p) => p.title.toLowerCase().includes(q) || p.body.toLowerCase().includes(q),
+    )
+  }, [savedPrompts, promptQuery])
+
+  function commitRename(prompt: SavedPrompt) {
+    const next = titleDraft.trim()
+    setEditingId(null)
+    if (!next || next === prompt.title) return
+    onRenamePrompt(prompt.id, next)
+  }
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -115,29 +139,87 @@ export default function Sidebar({
 
       <div className="saved-prompts" aria-label="Saved prompts">
         <p className="section-label">Saved prompts</p>
-        {savedPrompts.length === 0 ? (
-          <div className="saved-prompts-empty">Save a question to reuse it.</div>
+        <input
+          className="session-search"
+          type="search"
+          value={promptQuery}
+          placeholder="Search saved prompts…"
+          aria-label="Search saved prompts"
+          onChange={(e) => setPromptQuery(e.target.value)}
+        />
+        {filteredPrompts.length === 0 ? (
+          <div className="saved-prompts-empty">
+            {savedPrompts.length === 0 ? 'Save a question to reuse it.' : 'No saved prompts match that search'}
+          </div>
         ) : (
           <div className="saved-prompts-list">
-            {savedPrompts.map((p) => (
+            {filteredPrompts.map((p) => (
               <div key={p.id} className="saved-prompt-row">
-                <button
-                  type="button"
-                  className="saved-prompt-item"
-                  title={p.body}
-                  onClick={() => onUsePrompt(p)}
-                >
-                  <span className="saved-prompt-title">{p.title}</span>
-                </button>
-                <button
-                  type="button"
-                  className="session-delete"
-                  aria-label={`Delete saved prompt ${p.title}`}
-                  title="Delete"
-                  onClick={() => onRemovePrompt(p.id)}
-                >
-                  ×
-                </button>
+                {editingId === p.id ? (
+                  <form
+                    className="saved-prompt-rename"
+                    onSubmit={(e) => {
+                      e.preventDefault()
+                      commitRename(p)
+                    }}
+                  >
+                    <input
+                      className="saved-prompt-title-input"
+                      value={titleDraft}
+                      autoFocus
+                      aria-label="Rename saved prompt"
+                      onChange={(e) => setTitleDraft(e.target.value)}
+                      onBlur={() => {
+                        if (skipRenameBlur.current) {
+                          skipRenameBlur.current = false
+                          return
+                        }
+                        commitRename(p)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') {
+                          e.preventDefault()
+                          skipRenameBlur.current = true
+                          setEditingId(null)
+                        }
+                      }}
+                    />
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="saved-prompt-item"
+                      title={`${p.body}\n\nClick to load. Double-click to rename.`}
+                      onClick={() => onUsePrompt(p)}
+                      onDoubleClick={() => {
+                        setEditingId(p.id)
+                        setTitleDraft(p.title)
+                      }}
+                    >
+                      <span className="saved-prompt-title">{p.title}</span>
+                    </button>
+                    <div className="saved-prompt-actions">
+                      <button
+                        type="button"
+                        className="saved-prompt-run"
+                        title="Send this question now"
+                        onClick={() => onRunPrompt(p)}
+                      >
+                        Run
+                      </button>
+                      <button
+                        type="button"
+                        className="session-delete"
+                        aria-label={`Delete saved prompt ${p.title}`}
+                        title="Delete"
+                        onClick={() => onRemovePrompt(p.id)}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

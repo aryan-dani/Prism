@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react'
+import { listSavedPrompts, type AuthUser, type SavedPrompt } from './api'
 import { SUGGESTION_HINT, suggestionsForRole } from './suggestions'
-import type { AuthUser } from './api'
 
 type Props = {
   user: AuthUser
@@ -33,6 +34,13 @@ const STATS = [
 
 export default function Landing({ user, onEnter, onTryQuestion, onLogout }: Props) {
   const suggestions = suggestionsForRole(user.role)
+  const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([])
+
+  useEffect(() => {
+    void listSavedPrompts()
+      .then(setSavedPrompts)
+      .catch(() => setSavedPrompts([]))
+  }, [])
   return (
     <div className="landing">
       <header className="landing-bar">
@@ -100,6 +108,26 @@ export default function Landing({ user, onEnter, onTryQuestion, onLogout }: Prop
           ))}
         </div>
       </section>
+
+      {savedPrompts.length > 0 && (
+        <section className="landing-try" aria-label="Saved questions">
+          <h2>Your saved questions</h2>
+          <div className="suggestions landing-suggestions">
+            {savedPrompts.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="suggestion"
+                title={p.body}
+                onClick={() => onTryQuestion(p.body)}
+              >
+                <span className="suggestion-domain">Saved</span>
+                {p.title}
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="landing-try">
         <h2>Try a question that has to be exact</h2>

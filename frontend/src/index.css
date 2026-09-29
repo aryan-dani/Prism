@@ -401,6 +401,39 @@ a:focus-visible {
   white-space: nowrap;
 }
 
+.saved-prompt-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+}
+
+.saved-prompt-run {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.35rem;
+}
+
+.saved-prompt-run:hover {
+  text-decoration: underline;
+}
+
+.saved-prompt-rename {
+  grid-column: 1 / -1;
+}
+
+.saved-prompt-title-input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.45rem 0.6rem;
+  background: var(--panel-strong);
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
 .save-prompt-btn {
   flex: 0 0 auto;
   width: auto;

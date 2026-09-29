@@ -382,6 +382,7 @@ export type SavedPrompt = {
   title: string
   body: string
   created_at: string
+  duplicate?: boolean
 }
 
 export function listSavedPrompts() {
@@ -392,6 +393,13 @@ export function createSavedPrompt(body: string, title?: string) {
   return request<SavedPrompt>('/api/prompts', {
     method: 'POST',
     body: JSON.stringify({ body, title: title || null }),
+  })
+}
+
+export function renameSavedPrompt(id: string, title: string) {
+  return request<SavedPrompt>(`/api/prompts/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
   })
 }
 

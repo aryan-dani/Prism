@@ -13,6 +13,7 @@ import {
   getSession,
   listSavedPrompts,
   listSessions,
+  renameSavedPrompt,
   renderFormat,
   uploadDocument,
   type AuthUser,
@@ -209,7 +210,7 @@ export default function App({
     try {
       const created = await createSavedPrompt(body)
       setSavedPrompts((prev) => [created, ...prev.filter((p) => p.id !== created.id)])
-      setStatus('Prompt saved')
+      setStatus(created.duplicate ? 'Already saved' : 'Prompt saved')
     } catch (err) {
       if (err instanceof AuthError) {
         onAuthLost?.()
@@ -237,7 +238,30 @@ export default function App({
 
   function useSavedPrompt(prompt: SavedPrompt) {
     setDraft(prompt.body)
-    setStatus(`Loaded saved prompt: ${prompt.title}`)
+    setStatus(`Loaded “${prompt.title}”. Edit it, or press Send.`)
+    window.requestAnimationFrame(() => draftTextareaRef.current?.focus())
+  }
+
+  function runSavedPrompt(prompt: SavedPrompt) {
+    if (!activeId) {
+      setStatus('Still opening a chat…')
+      return
+    }
+    void sendMessage(prompt.body)
+  }
+
+  async function renamePrompt(id: string, title: string) {
+    try {
+      const updated = await renameSavedPrompt(id, title)
+      setSavedPrompts((prev) => prev.map((p) => (p.id === id ? updated : p)))
+      setStatus('Prompt renamed')
+    } catch (err) {
+      if (err instanceof AuthError) {
+        onAuthLost?.()
+        return
+      }
+      setStatus(err instanceof Error ? err.message : 'Could not rename prompt')
+    }
   }
 
   async function refreshSessions() {
@@ -555,6 +579,8 @@ export default function App({
         onSelectSession={(id) => void selectSession(id)}
         onRemoveSession={(id) => void removeSession(id)}
         onUsePrompt={useSavedPrompt}
+        onRunPrompt={runSavedPrompt}
+        onRenamePrompt={(id, title) => void renamePrompt(id, title)}
         onRemovePrompt={(id) => void removeSavedPrompt(id)}
       />
 
